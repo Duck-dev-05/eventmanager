@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@theme {
+  /* Surfaces */
+  --color-canvas: #eff1ef;
+  --color-panel: #ffffff;
+  --color-sunken: #f5f7f4;
+  --color-nav: #121d18;
+
+  /* Text tiers */
+  --color-ink: #101a15;
+  --color-ink-soft: #37463e;
+  --color-muted: #66756c;
+  --color-faint: #93a096;
+
+  /* Borders */
+  --color-line: #e3e7e1;
+  --color-line-soft: #eef1ec;
+  --color-line-strong: #c9d2c9;
+
+  /* Accent */
+  --color-accent: #cf6a2f;
+  --color-accent-soft: #fdf1e6;
+  --color-accent-line: #f1dbc7;
+
+  /* Elevation */
+  --shadow-panel:
+    0 1px 2px rgba(16, 26, 21, 0.04), 0 1px 3px rgba(16, 26, 21, 0.03);
+  --shadow-lift: 0 18px 36px -26px rgba(16, 26, 21, 0.42);
+  --shadow-float:
+    0 26px 52px -34px rgba(16, 26, 21, 0.45), 0 2px 6px rgba(16, 26, 21, 0.04);
+
+  /* Legacy indigo/violet utility names follow the copper brand ramp. */
+  --color-indigo-50: #fff7f0;
+  --color-indigo-100: #feecdc;
+  --color-indigo-200: #fbd6b8;
+  --color-indigo-300: #f5b989;
+  --color-indigo-400: #ed955d;
+  --color-indigo-500: #df793f;
+  --color-indigo-600: #c96532;
+  --color-indigo-700: #a9512a;
+  --color-indigo-800: #874326;
+  --color-indigo-900: #6f3923;
+  --color-violet-50: #fff8ef;
+  --color-violet-100: #ffefd9;
+  --color-violet-200: #f9dbb4;
+  --color-violet-300: #efc187;
+  --color-violet-400: #e4a45f;
+  --color-violet-500: #d38a48;
+  --color-violet-600: #b9743b;
+  --color-violet-700: #965d32;
+  --color-violet-800: #784b2b;
+  --color-violet-900: #633e26;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c6cec7 transparent;
+}
+
+::selection {
+  background-color: #f6dcc6;
+  color: #6f3a17;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise-in {
+    animation: none;
+  }
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    height: auto;
+    background: #fff;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}

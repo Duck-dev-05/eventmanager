@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { savePreferences } from "./preferences";
-import { getSessionUser } from "./session-cookie";
-import { updateUserName } from "./users";
+import { savePreferences } from "./preferences.ts";
+import { getSessionUser } from "./session-cookie.ts";
+import { updateUserName } from "./users.ts";
 
 export type ProfileState =
   | { error?: string; success?: string; name?: string }

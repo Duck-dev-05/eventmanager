@@ -3,12 +3,12 @@
 import {
   consumePasswordReset,
   createPasswordResetToken,
-} from "./password-reset";
-import { sendPasswordResetEmail } from "./password-reset-email";
-import type { ForgotPasswordState, ResetPasswordState } from "./password-types";
-import { requestIdentifier } from "./client-ip";
-import { checkRateLimit, retryMessage } from "./rate-limit";
-import { findUserByEmail, updateUserPassword } from "./users";
+} from "./password-reset.ts";
+import { sendPasswordResetEmail } from "./password-reset-email.ts";
+import type { ForgotPasswordState, ResetPasswordState } from "./password-types.ts";
+import { requestIdentifier } from "./client-ip.ts";
+import { checkRateLimit, retryMessage } from "./rate-limit.ts";
+import { findUserByEmail, updateUserPassword } from "./users.ts";
 
 const NEUTRAL_MESSAGE =
   "If an account exists for that email, a reset link is on its way.";

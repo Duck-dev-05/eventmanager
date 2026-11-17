@@ -1,34 +1,21 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { dataDirectory, getDb } from "./db";
-import { getEventRole } from "./events";
-import { rolePermissions } from "./roles";
+import path from "node:path";
+import { getDb } from "./db.ts";
+import { deleteObject, getObject, putObject } from "./storage.ts";
+import { getEventRole } from "./events.ts";
+import { rolePermissions } from "./roles.ts";
 
 import {
   MAX_FILE_BYTES,
   mimeTypeForFileName,
   type EventFile,
-} from "./file-types";
+} from "./file-types.ts";
 
 export { MAX_FILE_BYTES };
 export type { EventFile };
 
-type FileRow = {
-  id: string;
-  name: string;
-  mime_type: string;
-  size_bytes: number;
-  uploader_name: string | null;
-  created_at: string;
-};
-
-export function uploadsDirectory() {
-  return path.join(dataDirectory(), "uploads");
-}
-
 export async function getEventFiles(eventId: string): Promise<EventFile[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT f.id, f.name, f.mime_type, f.size_bytes,
               u.name AS uploader_name, f.created_at
@@ -48,6 +35,15 @@ export async function getEventFiles(eventId: string): Promise<EventFile[]> {
     createdAt: row.created_at,
   }));
 }
+
+type FileRow = {
+  id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploader_name: string | null;
+  created_at: string;
+};
 
 function safeExtension(fileName: string) {
   const extension = path.extname(fileName).toLowerCase();
@@ -86,13 +82,15 @@ export async function storeEventFile({
   }
 
   const storageKey = `${eventId}/${randomUUID()}${safeExtension(cleanName)}`;
-  const absolutePath = path.join(uploadsDirectory(), storageKey);
 
-  await mkdir(path.dirname(absolutePath), { recursive: true });
-  await writeFile(absolutePath, bytes);
+  const storedKey = await putObject({
+    key: `uploads/${storageKey}`,
+    bytes,
+    contentType: mimeTypeForFileName(cleanName, mimeType || "application/octet-stream"),
+  });
 
   const id = randomUUID();
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO event_files
          (id, event_id, name, mime_type, size_bytes, storage_key, uploaded_by, created_at)
@@ -104,7 +102,7 @@ export async function storeEventFile({
       cleanName.slice(0, 180),
       mimeTypeForFileName(cleanName, mimeType || "application/octet-stream"),
       bytes.byteLength,
-      storageKey,
+      storedKey,
       actorId,
       new Date().toISOString(),
     );
@@ -129,7 +127,7 @@ export async function readEventFile({
     return { success: false, error: "You cannot open this file.", status: 403 };
   }
 
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT name, mime_type, storage_key
        FROM event_files
@@ -144,7 +142,7 @@ export async function readEventFile({
   }
 
   try {
-    const file = await readFile(path.join(uploadsDirectory(), row.storage_key));
+    const file = await getObject(row.storage_key);
     const body = file.buffer.slice(
       file.byteOffset,
       file.byteOffset + file.byteLength,
@@ -181,8 +179,8 @@ export async function deleteEventFile({
     return { success: false, error: "You cannot delete files on this event." };
   }
 
-  const db = getDb();
-  const row = db
+  const db = await getDb();
+  const row = await db
     .prepare(
       `SELECT name, storage_key FROM event_files WHERE id = ? AND event_id = ?`,
     )
@@ -194,16 +192,12 @@ export async function deleteEventFile({
     return { success: false, error: "This file no longer exists." };
   }
 
-  db.prepare(`DELETE FROM event_files WHERE id = ? AND event_id = ?`).run(
+  await db.prepare(`DELETE FROM event_files WHERE id = ? AND event_id = ?`).run(
     fileId,
     eventId,
   );
 
-  try {
-    await unlink(path.join(uploadsDirectory(), row.storage_key));
-  } catch {
-    // The row is gone either way; a missing file on disk is not an error.
-  }
+  await deleteObject(row.storage_key);
 
   return { success: true, name: row.name };
 }

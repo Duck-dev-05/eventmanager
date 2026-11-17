@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { logEventActivity } from "./activity";
+import { logEventActivity } from "./activity.ts";
 import {
   acceptEventInvite,
   canManageEvent,
@@ -14,12 +14,12 @@ import {
   removeEventMember,
   resendEventInvite,
   updateEventMemberRole,
-} from "./events";
-import { sendEventInviteEmail } from "./event-invite-email";
-import { createNotification } from "./notifications";
-import { isAssignableRole, ROLE_LABELS } from "./roles";
-import { getSessionUser } from "./session-cookie";
-import { findUserByEmail, findUserById } from "./users";
+} from "./events.ts";
+import { sendEventInviteEmail } from "./event-invite-email.ts";
+import { createNotification } from "./notifications.ts";
+import { isAssignableRole, ROLE_LABELS } from "./roles.ts";
+import { getSessionUser } from "./session-cookie.ts";
+import { findUserByEmail, findUserById } from "./users.ts";
 
 export type InviteState =
   | { error?: string; success?: string; email?: string; inviteUrl?: string }

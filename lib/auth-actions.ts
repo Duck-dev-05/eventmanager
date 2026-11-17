@@ -1,11 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { AuthState } from "./auth-types";
-import { clearSessionCookie, setSessionCookie } from "./session-cookie";
-import { requestIdentifier } from "./client-ip";
-import { checkRateLimit, resetRateLimit, retryMessage } from "./rate-limit";
-import { createUser, findUserByEmail, verifyPassword } from "./users";
+import type { AuthState } from "./auth-types.ts";
+import { clearSessionCookie, setSessionCookie } from "./session-cookie.ts";
+import { requestIdentifier } from "./client-ip.ts";
+import { checkRateLimit, resetRateLimit, retryMessage } from "./rate-limit.ts";
+import { createUser, findUserByEmail, verifyPassword } from "./users.ts";
 
 function normalizeEmail(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";

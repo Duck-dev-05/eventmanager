@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
-import { getEventTitle } from "./events";
-import { getPreferences } from "./preferences";
-import { findUserById } from "./users";
+import { getEventTitle } from "./events.ts";
+import { getPreferences } from "./preferences.ts";
+import { findUserById } from "./users.ts";
 
 export type EmailDelivery =
   | { sent: true }

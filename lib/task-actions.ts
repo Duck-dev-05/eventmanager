@@ -1,15 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logEventActivity } from "./activity";
-import { emailTaskAssignment } from "./notification-email";
-import { getSessionUser } from "./session-cookie";
+import { logEventActivity } from "./activity.ts";
+import { emailTaskAssignment } from "./notification-email.ts";
+import { getSessionUser } from "./session-cookie.ts";
 import {
   createEventTask,
   deleteEventTask,
   setEventTaskStatus,
   updateEventTask,
-} from "./tasks";
+} from "./tasks.ts";
 
 export type TaskState =
   | { error?: string; success?: string; title?: string }

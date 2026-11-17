@@ -4,8 +4,8 @@ import {
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
-import { resolveAvatarUrl } from "./avatar";
-import { getDb } from "./db";
+import { resolveAvatarUrl } from "./avatar.ts";
+import { getDb } from "./db.ts";
 
 /** Workspace-wide access. Event roles live in roles.ts and are unrelated. */
 export type WorkspaceRole = "owner" | "admin" | "member";
@@ -66,8 +66,8 @@ function toStoredUser(row: UserRow): StoredUser {
 }
 
 /** The first account in a fresh install administers the workspace. */
-function nextWorkspaceRole(): WorkspaceRole {
-  const row = getDb().prepare("SELECT COUNT(*) AS count FROM users").get() as
+async function nextWorkspaceRole(): Promise<WorkspaceRole> {
+  const row = (await (await getDb()).prepare("SELECT COUNT(*) AS count FROM users").get()) as
     | { count: number }
     | undefined;
 
@@ -75,7 +75,7 @@ function nextWorkspaceRole(): WorkspaceRole {
 }
 
 export async function isWorkspaceAdmin(userId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare("SELECT workspace_role FROM users WHERE id = ?")
     .get(userId) as { workspace_role: string } | undefined;
 
@@ -84,15 +84,15 @@ export async function isWorkspaceAdmin(userId: string) {
 }
 
 export async function isWorkspaceOwner(userId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare("SELECT workspace_role FROM users WHERE id = ?")
     .get(userId) as { workspace_role: string } | undefined;
 
   return normalizeWorkspaceRole(row?.workspace_role) === "owner";
 }
 
-function workspaceOwnerCount() {
-  const row = getDb()
+async function workspaceOwnerCount() {
+  const row = await (await getDb())
     .prepare("SELECT COUNT(*) AS count FROM users WHERE workspace_role = 'owner'")
     .get() as { count: number } | undefined;
 
@@ -132,14 +132,14 @@ export async function adminSetWorkspaceRole({
     return { success: false, error: "That user no longer exists." };
   }
 
-  if (target.workspaceRole === "owner" && role !== "owner" && workspaceOwnerCount() <= 1) {
+  if (target.workspaceRole === "owner" && role !== "owner" && (await workspaceOwnerCount()) <= 1) {
     return {
       success: false,
       error: "The workspace needs at least one owner.",
     };
   }
 
-  getDb()
+  await (await getDb())
     .prepare("UPDATE users SET workspace_role = ? WHERE id = ?")
     .run(role, userId);
 
@@ -147,7 +147,7 @@ export async function adminSetWorkspaceRole({
 }
 
 export async function findUserByEmail(email: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(`SELECT ${columns} FROM users WHERE email = ?`)
     .get(email.toLowerCase()) as UserRow | undefined;
 
@@ -155,7 +155,7 @@ export async function findUserByEmail(email: string) {
 }
 
 export async function findUserById(id: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(`SELECT ${columns} FROM users WHERE id = ?`)
     .get(id) as UserRow | undefined;
 
@@ -163,17 +163,17 @@ export async function findUserById(id: string) {
 }
 
 export async function updateUserName(id: string, name: string) {
-  getDb().prepare(`UPDATE users SET name = ? WHERE id = ?`).run(name, id);
+  await (await getDb()).prepare(`UPDATE users SET name = ? WHERE id = ?`).run(name, id);
 }
 
 export async function updateUserAvatarUrl(id: string, avatarUrl: string | null) {
-  getDb()
+  await (await getDb())
     .prepare(`UPDATE users SET avatar_url = ? WHERE id = ?`)
     .run(avatarUrl, id);
 }
 
 export async function updateUserPassword(id: string, password: string) {
-  const result = getDb()
+  const result = await (await getDb())
     .prepare(`UPDATE users SET password_hash = ? WHERE id = ?`)
     .run(hashPassword(password), id);
 
@@ -201,11 +201,11 @@ export async function createUser({
     email: email.toLowerCase(),
     provider: "password",
     passwordHash: hashPassword(password),
-    workspaceRole: nextWorkspaceRole(),
+    workspaceRole: await nextWorkspaceRole(),
     createdAt: new Date().toISOString(),
   };
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO users
          (id, name, email, provider, password_hash, workspace_role, created_at)
@@ -235,7 +235,7 @@ export async function upsertGoogleUser({
   name?: string;
   picture?: string;
 }) {
-  const db = getDb();
+  const db = await getDb();
   const normalized = email.toLowerCase();
   const existing = await findUserByEmail(normalized);
   // Google refreshes the photo URL on every sign-in; storing it here keeps the
@@ -268,7 +268,7 @@ export async function upsertGoogleUser({
     googleSub: sub,
     avatarUrl,
     googleAvatarUrl: avatarUrl,
-    workspaceRole: nextWorkspaceRole(),
+    workspaceRole: await nextWorkspaceRole(),
     createdAt: new Date().toISOString(),
   };
 
@@ -318,8 +318,8 @@ export type UserWithStats = {
 };
 
 export async function listAllUsersWithStats(): Promise<UserWithStats[]> {
-  const db = getDb();
-  const rows = db
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `SELECT 
         u.id, 
@@ -396,10 +396,10 @@ export async function adminUpdateUser({
   name: string;
   email: string;
 }) {
-  const db = getDb();
+  const db = await getDb();
   const normalizedEmail = email.trim().toLowerCase();
 
-  const existing = db
+  const existing = await db
     .prepare("SELECT id FROM users WHERE email = ? AND id != ?")
     .get(normalizedEmail, userId) as { id: string } | undefined;
 
@@ -433,7 +433,7 @@ export async function adminResetPassword({
     };
   }
 
-  const db = getDb();
+  const db = await getDb();
   const passwordHash = hashPassword(newPassword);
   db.prepare(
     `UPDATE users SET password_hash = ?, provider = 'password' WHERE id = ?`,
@@ -457,21 +457,21 @@ export async function adminDeleteUser({
   if (!target) {
     return { success: false, error: "That user no longer exists." };
   }
-  if (target.workspaceRole === "owner" && workspaceOwnerCount() <= 1) {
+  if (target.workspaceRole === "owner" && (await workspaceOwnerCount()) <= 1) {
     return {
       success: false,
       error: "The workspace needs at least one owner.",
     };
   }
 
-  const db = getDb();
-  db.exec("BEGIN");
+  const db = await getDb();
+  const txn = await db.transaction();
   try {
-    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
-    db.exec("COMMIT");
+    await txn.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    await txn.commit();
     return { success: true };
   } catch {
-    db.exec("ROLLBACK");
+    await txn.rollback().catch(() => {});
     return { success: false, error: "Failed to delete user." };
   }
 }

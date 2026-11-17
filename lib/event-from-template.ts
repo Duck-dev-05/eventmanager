@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { logEventActivity } from "./activity";
-import { getDb } from "./db";
-import type { EventTemplate } from "./templates";
+import { logEventActivity } from "./activity.ts";
+import { getDb } from "./db.ts";
+import type { EventTemplate } from "./templates.ts";
 
 /**
  * Fills a freshly created event with the template's agenda and checklist.
@@ -20,14 +20,14 @@ export async function seedEventFromTemplate({
   template: EventTemplate;
   startsAt: string;
 }) {
-  const db = getDb();
+  const db = await getDb();
   const now = new Date().toISOString();
   let cursor = new Date(startsAt).getTime();
   if (Number.isNaN(cursor)) cursor = Date.now();
 
-  db.exec("BEGIN");
+  const txn = await db.transaction();
   try {
-    template.agendaPresets.forEach((preset, index) => {
+    for (const [index, preset] of template.agendaPresets.entries()) {
       const duration = Math.max(
         5,
         Math.min(1440, Math.floor(Number(preset.durationMinutes) || 30)),
@@ -35,41 +35,45 @@ export async function seedEventFromTemplate({
       const start = new Date(cursor);
       cursor += duration * 60_000;
 
-      db.prepare(
-        `INSERT INTO event_agenda_items
-           (id, event_id, title, description, starts_at, duration_minutes,
-            location, speaker_name, status, sort_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, '', '', 'scheduled', ?, ?)`,
-      ).run(
-        randomUUID(),
-        eventId,
-        preset.title.trim().slice(0, 140),
-        preset.description.trim(),
-        start.toISOString(),
-        duration,
-        index,
-        now,
-      );
-    });
+      await txn
+        .prepare(
+          `INSERT INTO event_agenda_items
+             (id, event_id, title, description, starts_at, duration_minutes,
+              location, speaker_name, status, sort_order, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, '', '', 'scheduled', ?, ?)`,
+        )
+        .run(
+          randomUUID(),
+          eventId,
+          preset.title.trim().slice(0, 140),
+          preset.description.trim(),
+          start.toISOString(),
+          duration,
+          index,
+          now,
+        );
+    }
 
-    template.taskPresets.forEach((preset) => {
-      db.prepare(
-        `INSERT INTO event_tasks
-           (id, event_id, title, notes, status, assignee_id, due_at, created_by, created_at)
-         VALUES (?, ?, ?, ?, 'open', NULL, NULL, ?, ?)`,
-      ).run(
-        randomUUID(),
-        eventId,
-        preset.title.trim().slice(0, 140),
-        preset.notes.trim(),
-        actorId,
-        now,
-      );
-    });
+    for (const preset of template.taskPresets) {
+      await txn
+        .prepare(
+          `INSERT INTO event_tasks
+             (id, event_id, title, notes, status, assignee_id, due_at, created_by, created_at)
+           VALUES (?, ?, ?, ?, 'open', NULL, NULL, ?, ?)`,
+        )
+        .run(
+          randomUUID(),
+          eventId,
+          preset.title.trim().slice(0, 140),
+          preset.notes.trim(),
+          actorId,
+          now,
+        );
+    }
 
-    db.exec("COMMIT");
+    await txn.commit();
   } catch (error) {
-    db.exec("ROLLBACK");
+    await txn.rollback().catch(() => {});
     throw error;
   }
 

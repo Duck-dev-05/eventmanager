@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { getDb } from "./db.ts";
 
 export type Preferences = {
   eventReminders: boolean;
@@ -25,7 +25,7 @@ type PreferenceRow = {
 };
 
 export async function getPreferences(userId: string): Promise<Preferences> {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT event_reminders, email_updates, weekly_digest, default_capacity, updated_at
        FROM user_preferences
@@ -50,7 +50,7 @@ export async function savePreferences(
 ): Promise<Preferences> {
   const updatedAt = new Date().toISOString();
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO user_preferences
          (user_id, event_reminders, email_updates, weekly_digest, default_capacity, updated_at)

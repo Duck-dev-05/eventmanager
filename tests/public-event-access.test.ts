@@ -10,6 +10,10 @@ import { join } from "node:path";
 const TEST_DATA_DIR = "/tmp/eventmanager-test";
 mkdirSync(TEST_DATA_DIR, { recursive: true });
 
+// Track the most recent test database so afterEach can release Windows file
+// locks before deleting the file (Windows refuses rmSync on open files).
+let openDatabase: DatabaseSync | null = null;
+
 function createDatabase() {
   const dbPath = join(TEST_DATA_DIR, "test.db");
 
@@ -19,6 +23,7 @@ function createDatabase() {
   }
 
   const db = new DatabaseSync(dbPath);
+  openDatabase = db;
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
 
@@ -170,12 +175,8 @@ function setupUsers(db: DatabaseSync) {
       ('${ownerId}', 'Owner', 'owner@example.com', 'password', datetime('now'))`,
   );
 
-  // Owner is accepted as a member of their own event
-  db.exec(
-    `INSERT OR IGNORE INTO event_members (id, event_id, user_id, role, status, invited_by) VALUES
-      ('m1', '${ownerId}', '${ownerId}', 'owner', 'accepted', '${ownerId}')`,
-  );
-
+  // The owner's access comes from events.owner_id; no event exists yet here,
+  // so no event_members row can reference an event id.
   return { ownerId };
 }
 
@@ -253,15 +254,15 @@ test("activity entries filtered to event/kind agenda for non-member on public ev
 
   // Add activity entries of different kinds
   db.prepare(`INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at) VALUES (?, ?, ?, 'event', 'Owner created the event', ?)`)
-    .run(randomUUID(), eventId, now);
+    .run(randomUUID(), eventId, null, now);
   db.prepare(`INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at) VALUES (?, ?, ?, 'agenda', 'Agenda item added', ?)`)
-    .run(randomUUID(), eventId, now);
+    .run(randomUUID(), eventId, null, now);
   db.prepare(`INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at) VALUES (?, ?, ?, 'member', 'Member joined', ?)`)
-    .run(randomUUID(), eventId, now);
+    .run(randomUUID(), eventId, null, now);
   db.prepare(`INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at) VALUES (?, ?, ?, 'task', 'Task created', ?)`)
-    .run(randomUUID(), eventId, now);
+    .run(randomUUID(), eventId, null, now);
   db.prepare(`INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at) VALUES (?, ?, ?, 'file', 'File uploaded', ?)`)
-    .run(randomUUID(), eventId, now);
+    .run(randomUUID(), eventId, null, now);
 
   // Simulate the filtering logic from activity/page.tsx
   // Non-member role is null, so only event and agenda kinds are visible
@@ -316,6 +317,9 @@ test("organiser email is retrieved from DB but access gated by role", () => {
 });
 
 afterEach(() => {
+  openDatabase?.close();
+  openDatabase = null;
+
   // Clean up test DB file synchronously
   const testDbPath = join(TEST_DATA_DIR, "test.db");
   if (existsSync(testDbPath)) {

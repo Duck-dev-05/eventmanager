@@ -1,11 +1,9 @@
 "use server";
 
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { revalidatePath } from "next/cache";
-import { dataDirectory } from "./db";
-import { getSessionUser } from "./session-cookie";
-import { findUserById, updateUserAvatarUrl } from "./users";
+import { deleteObject, putObject } from "./storage.ts";
+import { getSessionUser } from "./session-cookie.ts";
+import { findUserById, updateUserAvatarUrl } from "./users.ts";
 
 export type AvatarState = { error?: string; success?: string } | undefined;
 
@@ -16,16 +14,10 @@ const EXTENSIONS: Record<string, string> = {
   "image/webp": ".webp",
 };
 
-function avatarDirectory() {
-  return path.join(dataDirectory(), "avatars");
-}
-
 async function removeStoredAvatars(userId: string) {
   await Promise.all(
     Object.values(EXTENSIONS).map((extension) =>
-      unlink(path.join(avatarDirectory(), `${userId}${extension}`)).catch(
-        () => {},
-      ),
+      deleteObject(`avatars/${userId}${extension}`),
     ),
   );
 }
@@ -52,9 +44,12 @@ export async function uploadAvatar(
 
   const bytes = new Uint8Array(await file.arrayBuffer());
 
-  await mkdir(avatarDirectory(), { recursive: true });
   await removeStoredAvatars(user.id);
-  await writeFile(path.join(avatarDirectory(), `${user.id}${extension}`), bytes);
+  await putObject({
+    key: `avatars/${user.id}${extension}`,
+    bytes,
+    contentType: file.type,
+  });
   await updateUserAvatarUrl(
     user.id,
     `/api/avatars/${user.id}${extension}?v=${Date.now()}`,

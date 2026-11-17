@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { getDb } from "./db.ts";
 
 export type TemplateAgendaPreset = {
   title: string;
@@ -290,7 +290,7 @@ function toTemplate(row: TemplateRow): EventTemplate {
 export async function listTemplatesForUser(
   userId: string,
 ): Promise<EventTemplate[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT id, owner_id, name, category, description, default_venue,
               default_capacity, default_duration_minutes, structure_json, created_at
@@ -311,7 +311,7 @@ export async function getTemplateForUser(
   const builtIn = BUILT_IN_TEMPLATES.find((template) => template.id === id);
   if (builtIn) return builtIn;
 
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT id, owner_id, name, category, description, default_venue,
               default_capacity, default_duration_minutes, structure_json, created_at

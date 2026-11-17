@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { getDb } from "./db.ts";
 
 const NOTIFICATION_LIMITS: Record<number, number> = {
   1: 5,
@@ -25,7 +25,7 @@ export async function createNotification(params: {
   message: string;
   linkUrl?: string;
 }) {
-  const db = getDb();
+  const db = await getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -49,9 +49,9 @@ export async function listNotificationsForUser(
   userId: string,
   limit = 20,
 ): Promise<Notification[]> {
-  const db = getDb();
+  const db = await getDb();
   const limitRow = NOTIFICATION_LIMITS[limit] ?? limit;
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT id, event_id, kind, title, message, link_url, read_at,
               created_at
@@ -86,8 +86,8 @@ export async function listNotificationsForUser(
 export async function getUnreadNotificationCount(
   userId: string,
 ): Promise<number> {
-  const db = getDb();
-  const row = db
+  const db = await getDb();
+  const row = await db
     .prepare(
       `SELECT COUNT(*) AS count
        FROM event_notifications
@@ -102,7 +102,7 @@ export async function markNotificationAsRead(params: {
   notificationId: string;
   userId: string;
 }) {
-  const db = getDb();
+  const db = await getDb();
 
   db.prepare(
     `UPDATE event_notifications
@@ -113,7 +113,7 @@ export async function markNotificationAsRead(params: {
 }
 
 export async function markAllNotificationsAsRead(userId: string) {
-  const db = getDb();
+  const db = await getDb();
 
   db.prepare(
     `UPDATE event_notifications

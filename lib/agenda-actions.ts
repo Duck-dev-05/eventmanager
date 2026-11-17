@@ -7,9 +7,9 @@ import {
   setAgendaItemStatus,
   updateAgendaItem,
   type AgendaItemStatus,
-} from "./agenda";
-import { findEventForUser } from "./events";
-import { getSessionUser } from "./session-cookie";
+} from "./agenda.ts";
+import { findEventForUser } from "./events.ts";
+import { getSessionUser } from "./session-cookie.ts";
 
 export type AgendaActionState =
   | { error?: string; success?: string; itemId?: string }

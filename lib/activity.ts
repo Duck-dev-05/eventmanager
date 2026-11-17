@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getDb } from "./db";
+import { getDb } from "./db.ts";
 
 /** Coarse buckets used for icons and labels in the UI. */
 export type ActivityKind = "event" | "member" | "task" | "file" | "agenda";
@@ -40,7 +40,7 @@ export async function logEventActivity({
   const clean = summary.replace(/\s+/g, " ").trim().slice(0, 300);
   if (!eventId || !clean) return;
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -52,7 +52,7 @@ export async function getEventActivity(
   eventId: string,
   limit = 50,
 ): Promise<EventActivityEntry[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT a.id, a.kind, a.summary, a.created_at,
               u.name AS actor_name, u.avatar_url AS actor_avatar_url

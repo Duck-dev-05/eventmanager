@@ -1,5 +1,5 @@
-import { getDb } from "./db";
-import { listTemplatesForUser } from "./templates";
+import { getDb } from "./db.ts";
+import { listTemplatesForUser } from "./templates.ts";
 
 export type EventSearchResult = {
   id: string;
@@ -76,10 +76,10 @@ export async function searchWorkspace({
   }
 
   const pattern = `%${cleanQuery}%`;
-  const db = getDb();
+  const db = await getDb();
 
   // Search events user owns or is a member of
-  const eventRows = db
+  const eventRows = await db
     .prepare(
       `SELECT e.id, e.title, e.category, e.venue, e.starts_at
        FROM events e
@@ -111,7 +111,7 @@ export async function searchWorkspace({
   }));
 
   // Search tasks within events user has access to
-  const taskRows = db
+  const taskRows = await db
     .prepare(
       `SELECT t.id, t.title, t.notes, t.status, t.due_at, e.id AS event_id, e.title AS event_title
        FROM event_tasks t
@@ -167,7 +167,7 @@ export async function searchWorkspace({
     }));
 
   // People on any event the caller can open, plus owners, one row per event.
-  const memberRows = db
+  const memberRows = await db
     .prepare(
       `SELECT em.event_id, e.title AS event_title, u.id, u.name, u.email,
               u.avatar_url, em.role
@@ -221,7 +221,7 @@ export async function searchWorkspace({
     eventTitle: row.event_title,
   }));
 
-  const fileRows = db
+  const fileRows = await db
     .prepare(
       `SELECT f.id, f.name, f.size_bytes, e.id AS event_id, e.title AS event_title
        FROM event_files f

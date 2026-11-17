@@ -29,7 +29,9 @@ them under **Users**.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | Enables “Continue with Google”. |
 | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | optional | Sends invitations, password resets, task assignments and reminders. Use a Google App Password, never the account password. |
 | `GMAIL_FROM` | optional | Display address for outgoing mail; defaults to `GMAIL_USER`. |
-| `DATA_DIR` | optional | Moves the SQLite file, uploads and avatars outside `./data` (e.g. a mounted volume). |
+| `LIBSQL_URL` / `LIBSQL_AUTH_TOKEN` | on Vercel | Hosted libSQL/Turso database. Unset = local SQLite file in `./data`. |
+| `BLOB_READ_WRITE_TOKEN` | on Vercel | Vercel Blob token for event files and avatars. Unset = local `./data/storage`. |
+| `DATA_DIR` | optional | Moves the local SQLite file and local file storage outside `./data` (e.g. a mounted volume). |
 
 Without Gmail credentials the app still works: invitations return a copyable
 link and the reminder job logs that email is not configured.
@@ -65,16 +67,16 @@ link and the reminder job logs that email is not configured.
 
 ## Data and deployment
 
-All state lives on the filesystem:
+State lives in two services:
 
-- `data/eventpulse.db` (SQLite, WAL mode)
-- `data/uploads/<eventId>/`
-- `data/avatars/`
+- A SQLite-compatible database — local file `data/eventpulse.db` by default, or
+  a hosted libSQL/Turso database via `LIBSQL_URL` (required on Vercel).
+- Object storage for uploaded files and avatars — Vercel Blob via
+  `BLOB_READ_WRITE_TOKEN`, falling back to `data/storage/` locally.
 
-That means the app needs a persistent host (a VPS, a container with a volume, or
-a local machine). It cannot run on an ephemeral/serverless filesystem such as
-Vercel without moving storage to a hosted database and object store. Point
-`DATA_DIR` at a mounted volume to keep everything together.
+On a persistent host (VPS, container with a volume) the defaults just work. On
+Vercel, set `LIBSQL_URL` and `BLOB_READ_WRITE_TOKEN`; setup steps are in
+[docs/BACKUP_AND_DEPLOYMENT.md](docs/BACKUP_AND_DEPLOYMENT.md).
 
 Schema migrations run automatically when the database connection opens. After
 pulling a release with new migrations, restart the server; a long-running

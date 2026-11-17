@@ -4,9 +4,9 @@ import {
   SESSION_MAX_AGE,
   createSessionToken,
   verifySessionToken,
-} from "./session";
-import { findUserByEmail } from "./users";
-import type { WorkspaceRole } from "./users";
+} from "./session.ts";
+import { findUserByEmail } from "./users.ts";
+import type { WorkspaceRole } from "./users.ts";
 
 export async function setSessionCookie(user: {
   id: string;

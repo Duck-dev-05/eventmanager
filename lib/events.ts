@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { dataDirectory, getDb } from "./db";
+import { getDb } from "./db.ts";
+import { deleteObject } from "./storage.ts";
 import {
   isAssignableRole,
   normalizeRole,
   rolePermissions,
   type EventRole,
-} from "./roles";
-import { getSessionUser } from "./session-cookie";
+} from "./roles.ts";
+import { getSessionUser } from "./session-cookie.ts";
 
 export type EventVisibility = "private" | "public";
 
@@ -101,7 +102,7 @@ export async function createEvent({
     createdAt: new Date().toISOString(),
   };
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO events
         (id, owner_id, title, description, category, venue, starts_at, capacity, created_at)
@@ -150,7 +151,7 @@ export async function updateEvent({
 
   const nextVisibility = normalizeVisibility(visibility);
 
-  getDb()
+  await (await getDb())
     .prepare(
       `UPDATE events
        SET title = ?, description = ?, category = ?, venue = ?, starts_at = ?, capacity = ?,
@@ -178,8 +179,8 @@ export async function deleteEvent({
   eventId: string;
   actorId: string;
 }) {
-  const db = getDb();
-  const row = db
+  const db = await getDb();
+  const row = await db
     .prepare("SELECT owner_id FROM events WHERE id = ?")
     .get(eventId) as { owner_id: string } | undefined;
 
@@ -190,35 +191,29 @@ export async function deleteEvent({
     return { success: false, error: "Only the event owner can delete this event." };
   }
 
-  db.exec("BEGIN");
-  try {
-    db.prepare("DELETE FROM event_files WHERE event_id = ?").run(eventId);
-    db.prepare("DELETE FROM event_tasks WHERE event_id = ?").run(eventId);
-    db.prepare("DELETE FROM event_invites WHERE event_id = ?").run(eventId);
-    db.prepare("DELETE FROM event_members WHERE event_id = ?").run(eventId);
-    db.prepare("DELETE FROM events WHERE id = ?").run(eventId);
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+  // The files row references are read first so the stored objects can be
+  // deleted after the DB rows are gone.
+  const fileRows = (await db
+    .prepare("SELECT storage_key FROM event_files WHERE event_id = ?")
+    .all(eventId)) as Array<{ storage_key: string }>;
 
-  try {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const uploadDir = path.join(dataDirectory(), "uploads", eventId);
-    if (fs.existsSync(uploadDir)) {
-      fs.rmSync(uploadDir, { recursive: true, force: true });
-    }
-  } catch {
-    // Disk cleanup failure shouldn't abort DB deletion
+  await db.batch([
+    { sql: "DELETE FROM event_files WHERE event_id = ?", args: [eventId] },
+    { sql: "DELETE FROM event_tasks WHERE event_id = ?", args: [eventId] },
+    { sql: "DELETE FROM event_invites WHERE event_id = ?", args: [eventId] },
+    { sql: "DELETE FROM event_members WHERE event_id = ?", args: [eventId] },
+    { sql: "DELETE FROM events WHERE id = ?", args: [eventId] },
+  ]);
+
+  for (const file of fileRows) {
+    await deleteObject(file.storage_key).catch(() => {});
   }
 
   return { success: true };
 }
 
 export async function getEventOwner(eventId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT u.id, u.name, u.email, u.avatar_url
        FROM events e
@@ -240,7 +235,7 @@ export async function getEventOwner(eventId: string) {
 }
 
 export async function findEventForOwner(id: string, ownerId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(`SELECT ${columns} FROM events WHERE id = ? AND owner_id = ?`)
     .get(id, ownerId) as EventRow | undefined;
 
@@ -248,7 +243,7 @@ export async function findEventForOwner(id: string, ownerId: string) {
 }
 
 export async function listEventsForOwner(ownerId: string) {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT ${columns} FROM events WHERE owner_id = ? ORDER BY starts_at ASC`,
     )
@@ -265,7 +260,7 @@ const qualifiedColumns =
  * unlisted but readable by anyone signed in to the workspace who has the link.
  */
 export async function findEventForUser(id: string, userId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT ${qualifiedColumns}
        FROM events e
@@ -291,7 +286,7 @@ export async function getEventRole(
   eventId: string,
   userId: string,
 ): Promise<EventRole | null> {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT e.owner_id AS owner_id, em.role AS role
        FROM events e
@@ -320,7 +315,7 @@ export async function canManageEvent(eventId: string, userId: string) {
 
 /** Event title for notification copy, or null when the event is gone. */
 export async function getEventTitle(eventId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(`SELECT title FROM events WHERE id = ?`)
     .get(eventId) as { title: string } | undefined;
 
@@ -329,7 +324,7 @@ export async function getEventTitle(eventId: string) {
 
 /** Lists every event a user owns or has joined. */
 export async function listEventsForUser(userId: string) {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT ${qualifiedColumns}
        FROM events e
@@ -349,7 +344,7 @@ export async function listEventsForUser(userId: string) {
 
 /** Counts the distinct people collaborating on events a user owns. */
 export async function countEventMembersForOwner(ownerId: string) {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT COUNT(DISTINCT em.user_id) AS count
        FROM event_members em
@@ -373,7 +368,7 @@ export async function listActivityForUser(
   userId: string,
   limit = 30,
 ): Promise<ActivityEntry[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT 'created' AS kind, e.id AS event_id, e.title, e.created_at AS at
        FROM events e
@@ -412,7 +407,7 @@ export type EventMember = {
 };
 
 export async function getEventMembers(eventId: string): Promise<EventMember[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT u.id, u.name, u.email, u.avatar_url, em.role, em.invited_at, em.status
        FROM event_members em
@@ -455,7 +450,7 @@ export type EventInvitation = {
 export async function getEventInvitations(
   eventId: string,
 ): Promise<EventInvitation[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT ei.id, ei.email, ei.role, ei.created_at, ei.expires_at,
               u.name AS invitee_name, u.avatar_url AS invitee_avatar_url
@@ -507,7 +502,7 @@ export type IncomingInvite = {
 export async function listInvitesForEmail(
   email: string,
 ): Promise<IncomingInvite[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT ei.id, ei.token, ei.role, ei.status, ei.created_at, ei.expires_at,
               e.id AS event_id, e.title, e.starts_at, e.venue, e.category,
@@ -568,9 +563,9 @@ export async function createEventInvite({
   | { success: true; inviteToken: string }
   | { success: false; error: string }
 > {
-  const db = getDb();
+  const db = await getDb();
   const normalizedEmail = email.trim().toLowerCase();
-  const event = db
+  const event = await db
     .prepare(`SELECT owner_id FROM events WHERE id = ?`)
     .get(eventId) as { owner_id: string } | undefined;
 
@@ -594,7 +589,7 @@ export async function createEventInvite({
      WHERE event_id = ? AND email = ? AND status = 'pending' AND expires_at <= ?`,
   ).run(eventId, normalizedEmail, new Date().toISOString());
 
-  const acceptedMember = db
+  const acceptedMember = await db
     .prepare(
       `SELECT 1
        FROM event_members em
@@ -606,7 +601,7 @@ export async function createEventInvite({
     return { success: false, error: "This person already has access to this event." };
   }
 
-  const existingInvite = db
+  const existingInvite = await db
     .prepare(
       `SELECT 1 FROM event_invites
        WHERE event_id = ? AND email = ? AND status = 'pending'`,
@@ -649,7 +644,7 @@ export type EventInvite = {
 };
 
 export async function findEventInvite(token: string): Promise<EventInvite | null> {
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT e.id AS event_id, e.title AS event_title, ei.email, ei.role,
               ei.expires_at, u.name AS inviter_name, u.avatar_url AS inviter_avatar_url
@@ -705,10 +700,10 @@ export async function acceptEventInvite({
     return { success: false, error: "Sign in with the email address that received this invitation." };
   }
 
-  const db = getDb();
-  db.exec("BEGIN");
+  const db = await getDb();
+  const txn = await db.transaction();
   try {
-    const accepted = db
+    const accepted = await txn
       .prepare(
         `INSERT INTO event_members
           (id, event_id, user_id, role, invited_by, status, invited_at)
@@ -720,21 +715,23 @@ export async function acceptEventInvite({
       .run(randomUUID(), userId, token);
 
     if (accepted.changes === 0) {
-      db.exec("ROLLBACK");
+      await txn.rollback();
       return {
         success: false,
         error: "This invitation has already been used or is no longer available.",
       };
     }
 
-    db.prepare(
-      `UPDATE event_invites
-       SET status = 'accepted', accepted_at = ?
-       WHERE token = ? AND status = 'pending'`,
-    ).run(new Date().toISOString(), token);
-    db.exec("COMMIT");
+    await txn
+      .prepare(
+        `UPDATE event_invites
+         SET status = 'accepted', accepted_at = ?
+         WHERE token = ? AND status = 'pending'`,
+      )
+      .run(new Date().toISOString(), token);
+    await txn.commit();
   } catch {
-    db.exec("ROLLBACK");
+    await txn.rollback().catch(() => {});
     return { success: false, error: "This invitation could not be accepted." };
   }
 
@@ -756,7 +753,7 @@ export async function declineEventInvite(
     };
   }
 
-  getDb()
+  await (await getDb())
     .prepare(
       `UPDATE event_invites
        SET status = 'declined', accepted_at = NULL
@@ -770,8 +767,8 @@ export async function declineEventInvite(
 export async function declineEventInviteById(
   inviteId: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const db = getDb();
-  const invite = db
+  const db = await getDb();
+  const invite = await db
     .prepare(
       `SELECT email, event_id FROM event_invites
        WHERE id = ? AND status = 'pending'`,
@@ -830,8 +827,8 @@ export async function resendEventInvite({
     }
   | { success: false; error: string }
 > {
-  const db = getDb();
-  const invite = db
+  const db = await getDb();
+  const invite = await db
     .prepare(
       `SELECT ei.id, ei.event_id, ei.email, ei.role, ei.token,
               e.title AS event_title
@@ -891,8 +888,8 @@ export async function removeEventMember({
   eventId: string;
   userId: string;
 }): Promise<{ success: true } | { success: false; error: string }> {
-  const db = getDb();
-  const member = db
+  const db = await getDb();
+  const member = await db
     .prepare(
       `SELECT em.status FROM event_members em WHERE em.event_id = ? AND em.user_id = ?`,
     )
@@ -918,8 +915,8 @@ export async function leaveEvent({
   eventId: string;
   userId: string;
 }): Promise<{ success: true } | { success: false; error: string }> {
-  const db = getDb();
-  const event = db
+  const db = await getDb();
+  const event = await db
     .prepare(`SELECT owner_id FROM events WHERE id = ?`)
     .get(eventId) as { owner_id: string } | undefined;
 
@@ -931,7 +928,7 @@ export async function leaveEvent({
     return { success: false, error: "Owners cannot leave their own event." };
   }
 
-  const removed = db
+  const removed = await db
     .prepare(`DELETE FROM event_members WHERE event_id = ? AND user_id = ?`)
     .run(eventId, userId);
 
@@ -967,8 +964,8 @@ export async function updateEventMemberRole({
     return { success: false, error: "You cannot change your own role." };
   }
 
-  const db = getDb();
-  const event = db
+  const db = await getDb();
+  const event = await db
     .prepare(`SELECT owner_id FROM events WHERE id = ?`)
     .get(eventId) as { owner_id: string } | undefined;
 
@@ -980,7 +977,7 @@ export async function updateEventMemberRole({
     return { success: false, error: "The owner's role cannot be changed." };
   }
 
-  const updated = db
+  const updated = await db
     .prepare(
       `UPDATE event_members
        SET role = ?

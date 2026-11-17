@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
-import { dataDirectory } from "@/lib/db";
+import { getObject } from "@/lib/storage";
 import { findUserById } from "@/lib/users";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -30,12 +28,8 @@ export async function GET(
   }
 
   try {
-    const file = await readFile(
-      path.join(
-        dataDirectory(),
-        "avatars",
-        `${userId}.${extension.toLowerCase() === "jpeg" ? "jpg" : extension.toLowerCase()}`,
-      ),
+    const file = await getObject(
+      `avatars/${userId}.${extension.toLowerCase() === "jpeg" ? "jpg" : extension.toLowerCase()}`,
     );
 
     return new NextResponse(new Uint8Array(file), {

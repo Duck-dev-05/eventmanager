@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { rotateCalendarToken } from "./calendar-feed";
-import { getSessionUser } from "./session-cookie";
+import { rotateCalendarToken } from "./calendar-feed.ts";
+import { getSessionUser } from "./session-cookie.ts";
 
 export async function rotateCalendarFeed() {
   const user = await getSessionUser();

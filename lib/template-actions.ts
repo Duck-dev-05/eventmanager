@@ -3,9 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getDb } from "./db";
-import { eventCategories } from "./event-types";
-import { getSessionUser } from "./session-cookie";
+import { getDb } from "./db.ts";
+import { eventCategories } from "./event-types.ts";
+import { getSessionUser } from "./session-cookie.ts";
 
 export type TemplateFormState =
   | {
@@ -68,7 +68,7 @@ export async function createTemplate(
 
   const id = randomUUID();
 
-  getDb()
+  await (await getDb())
     .prepare(
       `INSERT INTO event_templates
         (id, owner_id, name, category, description, default_venue,
@@ -99,7 +99,7 @@ export async function deleteTemplate(formData: FormData) {
   const templateId = text(formData.get("templateId"));
   if (!templateId) redirect("/templates");
 
-  getDb()
+  await (await getDb())
     .prepare(`DELETE FROM event_templates WHERE id = ? AND owner_id = ?`)
     .run(templateId, user.id);
 

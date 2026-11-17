@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { getDb } from "./db";
-import { getEventRole } from "./events";
-import { rolePermissions } from "./roles";
+import { getDb } from "./db.ts";
+import { getEventRole } from "./events.ts";
+import { rolePermissions } from "./roles.ts";
 
 export type AgendaItemStatus = "scheduled" | "live" | "completed" | "cancelled";
 
@@ -55,8 +55,8 @@ function toAgendaItem(row: AgendaRow): AgendaItem {
 }
 
 export async function getEventAgenda(eventId: string): Promise<AgendaItem[]> {
-  const db = getDb();
-  const rows = db
+  const db = await getDb();
+  const rows = await db
     .prepare(
       `
       SELECT id, event_id, title, description, starts_at, duration_minutes,
@@ -72,8 +72,8 @@ export async function getEventAgenda(eventId: string): Promise<AgendaItem[]> {
 }
 
 export async function getAgendaItemById(itemId: string): Promise<AgendaItem | null> {
-  const db = getDb();
-  const row = db
+  const db = await getDb();
+  const row = await db
     .prepare(
       `
       SELECT id, event_id, title, description, starts_at, duration_minutes,
@@ -165,7 +165,7 @@ export async function createAgendaItem({
   const id = randomUUID();
   const createdAt = new Date().toISOString();
 
-  const db = getDb();
+  const db = await getDb();
   db.prepare(
     `
     INSERT INTO event_agenda_items (
@@ -269,7 +269,7 @@ export async function updateAgendaItem({
   const nextStatus = status !== undefined ? status : existing.status;
   const nextSortOrder = sortOrder !== undefined ? sortOrder : existing.sortOrder;
 
-  const db = getDb();
+  const db = await getDb();
   db.prepare(
     `
     UPDATE event_agenda_items
@@ -312,8 +312,8 @@ export async function deleteAgendaItem({
     return { success: false, error: "You don't have permission to delete agenda items." };
   }
 
-  const db = getDb();
-  const res = db
+  const db = await getDb();
+  const res = await db
     .prepare("DELETE FROM event_agenda_items WHERE id = ? AND event_id = ?")
     .run(itemId, eventId);
 
@@ -345,8 +345,8 @@ export async function setAgendaItemStatus({
     return { success: false, error: "You don't have permission to update item status." };
   }
 
-  const db = getDb();
-  const res = db
+  const db = await getDb();
+  const res = await db
     .prepare("UPDATE event_agenda_items SET status = ? WHERE id = ? AND event_id = ?")
     .run(status, itemId, eventId);
 

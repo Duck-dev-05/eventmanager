@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { getDb } from "./db";
+import { getDb } from "./db.ts";
 
 export type FeedOwner = { id: string; name: string; email: string };
 
@@ -8,8 +8,8 @@ export type FeedOwner = { id: string; name: string; email: string };
  * identifies their personal feed. Rotating it invalidates old subscriptions.
  */
 export async function getOrCreateCalendarToken(userId: string): Promise<string> {
-  const db = getDb();
-  const row = db
+  const db = await getDb();
+  const row = await db
     .prepare("SELECT calendar_token FROM users WHERE id = ?")
     .get(userId) as { calendar_token: string | null } | undefined;
 
@@ -26,7 +26,7 @@ export async function getOrCreateCalendarToken(userId: string): Promise<string> 
 
 export async function rotateCalendarToken(userId: string): Promise<string> {
   const token = randomBytes(24).toString("base64url");
-  getDb()
+  await (await getDb())
     .prepare("UPDATE users SET calendar_token = ? WHERE id = ?")
     .run(token, userId);
 
@@ -36,7 +36,7 @@ export async function rotateCalendarToken(userId: string): Promise<string> {
 export async function findFeedOwner(token: string): Promise<FeedOwner | null> {
   if (!token || token.length < 16) return null;
 
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       "SELECT id, name, email FROM users WHERE calendar_token = ? LIMIT 1",
     )

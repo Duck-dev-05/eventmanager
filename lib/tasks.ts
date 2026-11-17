@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { getDb } from "./db";
-import { getEventRole } from "./events";
-import { rolePermissions } from "./roles";
+import { getDb } from "./db.ts";
+import { getEventRole } from "./events.ts";
+import { rolePermissions } from "./roles.ts";
 
 export type TaskStatus = "open" | "done";
 
@@ -69,7 +69,7 @@ export function summarizeTasks(tasks: EventTask[]): TaskSummary {
 }
 
 export async function getEventTasks(eventId: string): Promise<EventTask[]> {
-  const rows = getDb()
+  const rows = await (await getDb())
     .prepare(
       `SELECT t.id, t.title, t.notes, t.status, t.assignee_id,
               u.name AS assignee_name, u.avatar_url AS assignee_avatar_url,
@@ -91,8 +91,8 @@ async function taskPermissions(eventId: string, userId: string) {
 }
 
 /** Owners and accepted members are the only people work can be assigned to. */
-function hasEventAccess(eventId: string, userId: string) {
-  const row = getDb()
+async function hasEventAccess(eventId: string, userId: string) {
+  const row = await (await getDb())
     .prepare(
       `SELECT 1
        FROM events e
@@ -141,9 +141,9 @@ export async function createEventTask({
     return { success: false, error: "Keep the title under 140 characters." };
   }
 
-  const db = getDb();
+  const db = await getDb();
 
-  if (assigneeId && !hasEventAccess(eventId, assigneeId)) {
+  if (assigneeId && !(await hasEventAccess(eventId, assigneeId))) {
     return {
       success: false,
       error: "That person does not have access to this event.",
@@ -200,14 +200,14 @@ export async function updateEventTask({
     return { success: false, error: "Keep the title under 140 characters." };
   }
 
-  if (assigneeId && !hasEventAccess(eventId, assigneeId)) {
+  if (assigneeId && !(await hasEventAccess(eventId, assigneeId))) {
     return {
       success: false,
       error: "That person does not have access to this event.",
     };
   }
 
-  const updated = getDb()
+  const updated = await (await getDb())
     .prepare(
       `UPDATE event_tasks
        SET title = ?, notes = ?, assignee_id = ?, due_at = ?
@@ -240,7 +240,7 @@ export async function deleteEventTask({
     return { success: false, error: "You cannot delete tasks on this event." };
   }
 
-  const existing = getDb()
+  const existing = await (await getDb())
     .prepare(`SELECT title FROM event_tasks WHERE id = ? AND event_id = ?`)
     .get(taskId, eventId) as { title: string } | undefined;
 
@@ -248,7 +248,7 @@ export async function deleteEventTask({
     return { success: false, error: "This task no longer exists." };
   }
 
-  const deleted = getDb()
+  const deleted = await (await getDb())
     .prepare(`DELETE FROM event_tasks WHERE id = ? AND event_id = ?`)
     .run(taskId, eventId);
 
@@ -278,7 +278,7 @@ export async function setEventTaskStatus({
     return { success: false, error: "You cannot change tasks on this event." };
   }
 
-  const existing = getDb()
+  const existing = await (await getDb())
     .prepare(`SELECT title FROM event_tasks WHERE id = ? AND event_id = ?`)
     .get(taskId, eventId) as { title: string } | undefined;
 
@@ -286,7 +286,7 @@ export async function setEventTaskStatus({
     return { success: false, error: "This task no longer exists." };
   }
 
-  const updated = getDb()
+  const updated = await (await getDb())
     .prepare(
       `UPDATE event_tasks SET status = ? WHERE id = ? AND event_id = ?`,
     )

@@ -1,12 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { logEventActivity } from "./activity";
-import { seedEventFromTemplate } from "./event-from-template";
-import { eventCategories, type EventFormState } from "./event-types";
-import { createEvent } from "./events";
-import { getTemplateForUser } from "./templates";
-import { getSessionUser } from "./session-cookie";
+import { logEventActivity } from "./activity.ts";
+import { seedEventFromTemplate } from "./event-from-template.ts";
+import { eventCategories, type EventFormState } from "./event-types.ts";
+import { createEvent } from "./events.ts";
+import { getTemplateForUser } from "./templates.ts";
+import { getSessionUser } from "./session-cookie.ts";
 
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";

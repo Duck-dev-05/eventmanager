@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { getDb } from "./db";
+import { getDb } from "./db.ts";
 
 /** How long a reset link stays valid. */
 const RESET_TTL_MINUTES = 60;
@@ -23,7 +23,7 @@ type ResetRow = {
  * is burned so only the newest email works.
  */
 export async function createPasswordResetToken(userId: string) {
-  const db = getDb();
+  const db = await getDb();
   const now = new Date();
 
   db.prepare(
@@ -53,7 +53,7 @@ export async function findPasswordReset(
 ): Promise<PasswordReset | null> {
   if (!token) return null;
 
-  const row = getDb()
+  const row = await (await getDb())
     .prepare(
       `SELECT pr.user_id, u.name, u.email, pr.expires_at
        FROM password_resets pr
@@ -82,7 +82,7 @@ export async function consumePasswordReset(token: string) {
   const reset = await findPasswordReset(token);
   if (!reset) return null;
 
-  const result = getDb()
+  const result = await (await getDb())
     .prepare(
       `UPDATE password_resets SET used_at = ?
        WHERE token = ? AND used_at IS NULL`,

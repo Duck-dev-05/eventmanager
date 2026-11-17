@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
-} from "./notifications";
-import { getSessionUser } from "./session-cookie";
+} from "./notifications.ts";
+import { getSessionUser } from "./session-cookie.ts";
 
 export type NotificationState =
   | { error?: string; success?: string }

@@ -3,7 +3,7 @@ import { test, afterEach } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 // Use a throwaway database directory so the real one is untouched

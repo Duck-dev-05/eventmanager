@@ -25,21 +25,13 @@ import {
 import { useSidebar } from "./app-shell";
 import { NotificationBell } from "./notification-bell";
 
-const sections = [
-  {
-    label: "Workspace",
-    items: [
-      { href: "/dashboard", label: "Dashboard", Icon: GridIcon },
-      { href: "/my-events", label: "My Events", Icon: CalendarIcon },
-      { href: "/invitations", label: "Invitations", Icon: MailIcon },
-      { href: "/calendar", label: "Calendar", Icon: CalendarDotsIcon },
-      { href: "/users", label: "Users", Icon: UsersIcon },
-    ],
-  },
-  {
-    label: "Organize",
-    items: [{ href: "/my-activity", label: "My Activity", Icon: PulseIcon }],
-  },
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", Icon: GridIcon },
+  { href: "/my-events", label: "My Events", Icon: CalendarIcon },
+  { href: "/invitations", label: "Invitations", Icon: MailIcon },
+  { href: "/calendar", label: "Calendar", Icon: CalendarDotsIcon },
+  { href: "/users", label: "Users", Icon: UsersIcon },
+  { href: "/my-activity", label: "My Activity", Icon: PulseIcon },
 ];
 
 const accountLinks = [
@@ -186,35 +178,21 @@ export function Sidebar({ account }: { account?: ReactNode }) {
 
         <nav
           aria-label="Workspace"
-          className="mt-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-0.5"
+          className="mt-6 min-h-0 flex-1 overflow-y-auto pr-0.5"
         >
-          {sections.map((section) => (
-            <div key={section.label}>
-              {collapsed ? (
-                <span
-                  aria-hidden="true"
-                  className="mx-auto mb-2 block h-px w-6 bg-line"
+          <ul className="space-y-0.5">
+            {navItems.map(({ href, label, Icon }) => (
+              <li key={href}>
+                <NavItem
+                  href={href}
+                  label={label}
+                  Icon={Icon}
+                  active={isActive(pathname, href)}
+                  collapsed={collapsed}
                 />
-              ) : (
-                <p className="px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-faint">
-                  {section.label}
-                </p>
-              )}
-              <ul className="mt-1.5 space-y-0.5">
-                {section.items.map(({ href, label, Icon }) => (
-                  <li key={href}>
-                    <NavItem
-                      href={href}
-                      label={label}
-                      Icon={Icon}
-                      active={isActive(pathname, href)}
-                      collapsed={collapsed}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+              </li>
+            ))}
+          </ul>
         </nav>
 
         <div className="mt-4 border-t border-line-soft pt-3">
@@ -344,49 +322,20 @@ export function MobileNav() {
               Create event
             </Link>
 
-            <nav
-              aria-label="Workspace"
-              className="mt-5 min-h-0 flex-1 space-y-5"
-            >
-              {sections.map((section) => (
-                <div key={section.label}>
-                  <p className="px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-faint">
-                    {section.label}
-                  </p>
-                  <ul className="mt-1.5 space-y-0.5">
-                    {section.items.map(({ href, label, Icon }) => (
-                      <li key={href}>
-                        <NavItem
-                          href={href}
-                          label={label}
-                          Icon={Icon}
-                          active={isActive(pathname, href)}
-                          onNavigate={() => setDrawerOpen(false)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-
-              <div>
-                <p className="px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-faint">
-                  Account
-                </p>
-                <ul className="mt-1.5 space-y-0.5">
-                  {accountLinks.map(({ href, label, Icon }) => (
-                    <li key={href}>
-                      <NavItem
-                        href={href}
-                        label={label}
-                        Icon={Icon}
-                        active={isActive(pathname, href)}
-                        onNavigate={() => setDrawerOpen(false)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            <nav aria-label="Workspace" className="mt-5 min-h-0 flex-1">
+              <ul className="space-y-0.5">
+                {[...navItems, ...accountLinks].map(({ href, label, Icon }) => (
+                  <li key={href}>
+                    <NavItem
+                      href={href}
+                      label={label}
+                      Icon={Icon}
+                      active={isActive(pathname, href)}
+                      onNavigate={() => setDrawerOpen(false)}
+                    />
+                  </li>
+                ))}
+              </ul>
             </nav>
 
             <div className="mt-4 border-t border-line-soft pt-3">

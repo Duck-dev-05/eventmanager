@@ -139,22 +139,66 @@ function toDb(client: Client): Db {
   };
 }
 
+/**
+ * Hosted libSQL (Turso) rejects writes to `PRAGMA user_version`, so the version
+ * is mirrored in this table as well. Local file databases keep both in sync.
+ */
+const SCHEMA_VERSION_TABLE = "schema_migrations";
+
+async function readSchemaVersion(client: Client): Promise<number> {
+  let pragmaVersion = 0;
+  try {
+    const result = await client.execute("PRAGMA user_version");
+    pragmaVersion = Number(
+      (result.rows[0] as { user_version?: number } | undefined)?.user_version ?? 0,
+    );
+  } catch {
+    // Hosted databases may refuse this read; the table below is authoritative.
+  }
+
+  let tableVersion = 0;
+  try {
+    const result = await client.execute(
+      `SELECT version FROM ${SCHEMA_VERSION_TABLE} WHERE id = 1`,
+    );
+    tableVersion = Number(
+      (result.rows[0] as { version?: number } | undefined)?.version ?? 0,
+    );
+  } catch {
+    // The table does not exist until the first migration finishes.
+  }
+
+  return Math.max(pragmaVersion, tableVersion);
+}
+
+async function writeSchemaVersion(client: Client, version: number) {
+  await client.execute(`CREATE TABLE IF NOT EXISTS ${SCHEMA_VERSION_TABLE} (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      version INTEGER NOT NULL
+    )`);
+  await client.execute({
+    sql: `INSERT INTO ${SCHEMA_VERSION_TABLE} (id, version) VALUES (1, ?)
+      ON CONFLICT (id) DO UPDATE SET version = excluded.version`,
+    args: [version],
+  });
+
+  // Best effort: the local file database keeps the pragma too, hosted ones
+  // reject the statement and rely on the table.
+  await client.execute(`PRAGMA user_version = ${version}`).catch(() => {});
+}
+
 async function migrate(client: Client) {
-  const versionResult = await client.execute("PRAGMA user_version");
-  const currentVersion = Number(
-    (versionResult.rows[0] as { user_version?: number } | undefined)
-      ?.user_version ?? 0,
-  );
+  const currentVersion = await readSchemaVersion(client);
 
   for (let version = currentVersion; version < migrations.length; version++) {
     try {
-      await client.executeMultiple(
-        `BEGIN; ${migrations[version]}; PRAGMA user_version = ${version + 1}; COMMIT;`,
-      );
+      await client.executeMultiple(`BEGIN; ${migrations[version]}; COMMIT;`);
     } catch (error) {
       await client.executeMultiple("ROLLBACK;").catch(() => {});
       throw error;
     }
+
+    await writeSchemaVersion(client, version + 1);
   }
 }
 
@@ -180,11 +224,13 @@ async function importLegacyJson(client: Client) {
       (id, name, email, provider, password_hash, google_sub, avatar_url, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
-  await client.executeMultiple("BEGIN");
-  try {
-    for (const user of users) {
-      if (!user?.email) continue;
-      await client.execute(insertSql, [
+  // A batch is one atomic write: hosted libSQL cannot keep a transaction open
+  // across separate requests, so `BEGIN`/`COMMIT` spread over calls fails there.
+  const statements = users
+    .filter((user): user is LegacyUser & { email: string } => Boolean(user?.email))
+    .map((user) => ({
+      sql: insertSql,
+      args: [
         user.id ?? randomUUID(),
         user.name ?? user.email.split("@")[0],
         user.email.toLowerCase(),
@@ -193,13 +239,10 @@ async function importLegacyJson(client: Client) {
         user.googleSub ?? null,
         user.avatarUrl ?? null,
         user.createdAt ?? new Date().toISOString(),
-      ] as InValue[]);
-    }
-    await client.executeMultiple("COMMIT");
-  } catch (error) {
-    await client.executeMultiple("ROLLBACK").catch(() => {});
-    throw error;
-  }
+      ] as InValue[],
+    }));
+
+  if (statements.length > 0) await client.batch(statements, "write");
 }
 
 /** Guarantees somebody can administer the workspace, even on an imported DB. */

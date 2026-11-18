@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { CalendarFeedCard } from "@/components/calendar-feed-card";
+import { DesktopSyncCard } from "@/components/desktop-sync-card";
 import { PageHeader } from "@/components/page-header";
 import { PreferencesForm } from "@/components/preferences-form";
 import { secondaryButton } from "@/components/ui";
@@ -16,6 +17,7 @@ import {
 import { getOrCreateCalendarToken } from "@/lib/calendar-feed";
 import { getPreferences } from "@/lib/preferences";
 import { getSessionUser } from "@/lib/session-cookie";
+import { listSyncDevices } from "@/lib/sync";
 
 const quickLinks = [
   {
@@ -53,9 +55,10 @@ async function SettingsContent() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const [preferences, calendarToken, headerList] = await Promise.all([
+  const [preferences, calendarToken, devices, headerList] = await Promise.all([
     getPreferences(user.id),
     getOrCreateCalendarToken(user.id),
+    listSyncDevices(user.id),
     headers(),
   ]);
 
@@ -71,6 +74,9 @@ async function SettingsContent() {
         <PreferencesForm preferences={preferences} />
         <div className="mt-6 border-t border-zinc-100 pt-6">
           <CalendarFeedCard feedUrl={feedUrl} />
+        </div>
+        <div className="mt-6 border-t border-zinc-100 pt-6">
+          <DesktopSyncCard devices={devices} />
         </div>
       </section>
 

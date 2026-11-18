@@ -230,4 +230,38 @@ export const migrations: string[] = [
   `
     ALTER TABLE events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';
   `,
+  `
+    -- Desktop app sync: paired devices and an ordered changelog of event
+    -- mutations. Desktop apps poll /api/sync/pull and push via /api/sync/push.
+    CREATE TABLE sync_devices (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      name TEXT NOT NULL DEFAULT 'Desktop app',
+      token_hash TEXT NOT NULL UNIQUE,
+      last_seen_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX sync_devices_user_idx
+      ON sync_devices (user_id);
+
+    CREATE TABLE sync_changes (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      device_id TEXT REFERENCES sync_devices (id) ON DELETE SET NULL,
+      entity TEXT NOT NULL,
+      action TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX sync_changes_user_seq_idx
+      ON sync_changes (user_id, seq);
+
+    CREATE TABLE sync_acks (
+      device_id TEXT PRIMARY KEY REFERENCES sync_devices (id) ON DELETE CASCADE,
+      last_seq INTEGER NOT NULL DEFAULT 0
+    );
+  `,
 ];

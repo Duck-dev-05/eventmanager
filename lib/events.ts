@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db.ts";
 import { deleteObject } from "./storage.ts";
+import { appendSyncChange } from "./sync.ts";
 import {
   isAssignableRole,
   normalizeRole,
@@ -102,7 +103,9 @@ export async function createEvent({
     createdAt: new Date().toISOString(),
   };
 
-  await (await getDb())
+  const db = await getDb();
+
+  await db
     .prepare(
       `INSERT INTO events
         (id, owner_id, title, description, category, venue, starts_at, capacity, created_at)
@@ -119,6 +122,25 @@ export async function createEvent({
       event.capacity,
       event.createdAt,
     );
+
+  // Paired desktop apps poll this changelog.
+  await appendSyncChange(db, {
+    userId: event.ownerId,
+    action: "upsert",
+    eventId: event.id,
+    event: {
+      id: event.id,
+      owner_id: event.ownerId,
+      title: event.title,
+      description: event.description,
+      category: event.category,
+      venue: event.venue,
+      starts_at: event.startsAt,
+      capacity: event.capacity,
+      visibility: event.visibility,
+      created_at: event.createdAt,
+    },
+  });
 
   return event;
 }
@@ -151,7 +173,9 @@ export async function updateEvent({
 
   const nextVisibility = normalizeVisibility(visibility);
 
-  await (await getDb())
+  const db = await getDb();
+
+  await db
     .prepare(
       `UPDATE events
        SET title = ?, description = ?, category = ?, venue = ?, starts_at = ?, capacity = ?,
@@ -168,6 +192,18 @@ export async function updateEvent({
       nextVisibility,
       eventId,
     );
+
+  const row = (await db
+    .prepare(`SELECT ${columns} FROM events WHERE id = ?`)
+    .get(eventId)) as EventRow | undefined;
+  if (row) {
+    await appendSyncChange(db, {
+      userId: row.owner_id,
+      action: "upsert",
+      eventId,
+      event: row,
+    });
+  }
 
   return { success: true };
 }
@@ -204,6 +240,12 @@ export async function deleteEvent({
     { sql: "DELETE FROM event_members WHERE event_id = ?", args: [eventId] },
     { sql: "DELETE FROM events WHERE id = ?", args: [eventId] },
   ]);
+
+  await appendSyncChange(db, {
+    userId: row.owner_id,
+    action: "delete",
+    eventId,
+  });
 
   for (const file of fileRows) {
     await deleteObject(file.storage_key).catch(() => {});

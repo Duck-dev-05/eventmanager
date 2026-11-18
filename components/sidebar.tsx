@@ -38,10 +38,7 @@ const sections = [
   },
   {
     label: "Organize",
-    items: [
-      { href: "/templates", label: "Templates", Icon: ColumnsIcon },
-      { href: "/my-activity", label: "My Activity", Icon: PulseIcon },
-    ],
+    items: [{ href: "/my-activity", label: "My Activity", Icon: PulseIcon }],
   },
 ];
 
@@ -290,7 +287,7 @@ export function MobileNav() {
         <div className="flex shrink-0 items-center gap-0.5">
           <Link
             href="/search"
-            aria-label="Search events, templates and tasks"
+            aria-label="Search events and tasks"
             className="flex h-9 w-9 items-center justify-center rounded-xl text-muted transition-colors hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <SearchIcon className="h-[18px] w-[18px]" />

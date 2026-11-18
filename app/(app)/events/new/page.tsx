@@ -7,45 +7,31 @@ import { ChevronRightIcon } from "@/components/icons";
 import { publishEvent } from "@/lib/event-actions";
 import { getPreferences } from "@/lib/preferences";
 import { getSessionUser } from "@/lib/session-cookie";
-import { getTemplateForUser } from "@/lib/templates";
 
 export const instant = false;
 
-export default async function NewEventPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ templateId?: string }>;
-}) {
+export default async function NewEventPage() {
   await connection();
-  const { templateId } = (await searchParams) ?? {};
 
   const user = await getSessionUser();
   const preferences = user ? await getPreferences(user.id) : null;
-  const template =
-    templateId && user ? await getTemplateForUser(templateId, user.id) : null;
 
   const initialValues = {
-    title: template ? `${template.name}` : "",
-    description: template ? template.description : "",
-    category: template ? template.category : "Conference",
-    venue: template ? template.defaultVenue : "",
-    capacity: template?.defaultCapacity
-      ? String(template.defaultCapacity)
-      : preferences?.defaultCapacity
-        ? String(preferences.defaultCapacity)
-        : "",
+    title: "",
+    description: "",
+    category: "Conference",
+    venue: "",
+    capacity: preferences?.defaultCapacity
+      ? String(preferences.defaultCapacity)
+      : "",
   };
 
   return (
     <div className="space-y-7">
       <PageHeader
         eyebrow="Workspace"
-        title={template ? `Create from “${template.name}”` : "Create event"}
-        description={
-          template
-            ? "Template defaults have been pre-filled below. Adjust the schedule and venue to fit."
-            : "Set up the essentials now — you can fine-tune guest details later."
-        }
+        title="Create event"
+        description="Set up the essentials now — you can fine-tune guest details later."
         action={
           <Link href="/my-events" className={secondaryButton}>
             <ChevronRightIcon className="h-3.5 w-3.5 rotate-180" />
@@ -54,11 +40,7 @@ export default async function NewEventPage({
         }
       />
 
-      <EventForm
-        action={publishEvent}
-        initialValues={initialValues}
-        templateId={template?.id}
-      />
+      <EventForm action={publishEvent} initialValues={initialValues} />
     </div>
   );
 }

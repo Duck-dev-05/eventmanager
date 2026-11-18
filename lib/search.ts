@@ -1,5 +1,4 @@
 import { getDb } from "./db.ts";
-import { listTemplatesForUser } from "./templates.ts";
 
 export type EventSearchResult = {
   id: string;
@@ -17,16 +16,6 @@ export type TaskSearchResult = {
   eventId: string;
   eventTitle: string;
   dueAt: string | null;
-};
-
-export type TemplateSearchResult = {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  agendaCount: number;
-  taskCount: number;
-  isCustom: boolean;
 };
 
 export type MemberSearchResult = {
@@ -51,7 +40,6 @@ export type WorkspaceSearchResults = {
   query: string;
   events: EventSearchResult[];
   tasks: TaskSearchResult[];
-  templates: TemplateSearchResult[];
   members: MemberSearchResult[];
   files: FileSearchResult[];
 };
@@ -69,7 +57,6 @@ export async function searchWorkspace({
       query: "",
       events: [],
       tasks: [],
-      templates: [],
       members: [],
       files: [],
     };
@@ -146,25 +133,6 @@ export async function searchWorkspace({
     eventTitle: row.event_title,
     dueAt: row.due_at,
   }));
-
-  // Templates are few, so filter the merged custom + built-in list in memory.
-  const needle = cleanQuery.toLowerCase();
-  const templates: TemplateSearchResult[] = (await listTemplatesForUser(userId))
-    .filter((template) =>
-      [template.name, template.category, template.description].some((value) =>
-        value.toLowerCase().includes(needle),
-      ),
-    )
-    .slice(0, 20)
-    .map((template) => ({
-      id: template.id,
-      name: template.name,
-      category: template.category,
-      description: template.description,
-      agendaCount: template.agendaPresets.length,
-      taskCount: template.taskPresets.length,
-      isCustom: template.isCustom === true,
-    }));
 
   // People on any event the caller can open, plus owners, one row per event.
   const memberRows = await db
@@ -254,7 +222,6 @@ export async function searchWorkspace({
     query: cleanQuery,
     events,
     tasks,
-    templates,
     members,
     files,
   };

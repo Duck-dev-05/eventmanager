@@ -3,7 +3,7 @@ import { CalendarIcon, CheckCircleSolidIcon } from "./icons";
 
 const highlights = [
   "One dashboard for every event you run",
-  "Calendar, templates and saved events",
+  "Calendar and saved events",
   "Registrations and activity in real time",
 ];
 

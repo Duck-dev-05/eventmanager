@@ -31,7 +31,7 @@ export function TopbarSearch() {
         ref={inputRef}
         type="search"
         name="q"
-        aria-label="Search events, tasks, templates, people and files"
+        aria-label="Search events, tasks, people and files"
         placeholder="Search everything..."
         className="h-10 w-full rounded-xl border border-line bg-sunken/70 pl-9 pr-14 text-[13px] text-ink placeholder:text-faint outline-none transition focus:border-accent/60 focus:bg-panel focus:ring-2 focus:ring-accent/15"
       />

@@ -8,7 +8,6 @@ import {
   CalendarIcon,
   CheckCircleSolidIcon,
   ClockIcon,
-  ColumnsIcon,
   DownloadIcon,
   MapPinIcon,
   SearchIcon,
@@ -56,7 +55,7 @@ async function SearchResultsView({ query }: { query: string }) {
         <EmptyState
           icon={<SearchIcon className="h-5 w-5" />}
           title="Search your workspace"
-          description="Search events, tasks, templates, teammates and uploaded files across your workspace."
+          description="Search events, tasks, teammates and uploaded files across your workspace."
         />
       </section>
     );
@@ -65,7 +64,6 @@ async function SearchResultsView({ query }: { query: string }) {
   const totalCount =
     results.events.length +
     results.tasks.length +
-    results.templates.length +
     results.members.length +
     results.files.length;
 
@@ -180,49 +178,6 @@ async function SearchResultsView({ query }: { query: string }) {
         </section>
       ) : null}
 
-      {/* Template Results */}
-      {results.templates.length > 0 ? (
-        <section className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/[0.02]">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
-            <h2 className="flex items-center gap-2 text-[15px] font-semibold text-zinc-900">
-              <ColumnsIcon className="h-4 w-4 text-[#1e503c]" />
-              Templates ({results.templates.length})
-            </h2>
-          </div>
-          <ul className="divide-y divide-zinc-100">
-            {results.templates.map((template) => (
-              <li key={template.id}>
-                <Link
-                  href={`/templates/${template.id}`}
-                  className="group flex flex-col gap-2 px-6 py-4 transition-colors hover:bg-zinc-50/70 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[14.5px] font-semibold text-zinc-900 transition-colors group-hover:text-[#1e503c]">
-                        {template.name}
-                      </span>
-                      <span className="rounded-full bg-[#eef3ec] px-2 py-0.5 text-[11px] font-semibold text-[#1e503c] ring-1 ring-inset ring-[#dbe6d8]">
-                        {template.category}
-                      </span>
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] text-zinc-500">
-                      {template.description || "No description saved with this template."}
-                    </p>
-                    <p className="mt-1 text-[12px] text-zinc-400">
-                      {template.agendaCount} agenda slots · {template.taskCount}{" "}
-                      checklist tasks · {template.isCustom ? "Your template" : "Built-in"}
-                    </p>
-                  </div>
-                  <span className="text-[12.5px] font-semibold text-[#1e503c] sm:self-center">
-                    Preview blueprint →
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       {/* People Results */}
       {results.members.length > 0 ? (
         <section className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/[0.02]">
@@ -317,7 +272,7 @@ export default async function SearchPage({
         description={
           q
             ? `Showing results for “${q}”`
-            : "Find events, tasks, templates, people and files across your workspace."
+            : "Find events, tasks, people and files across your workspace."
         }
       />
 
@@ -327,7 +282,7 @@ export default async function SearchPage({
           type="search"
           name="q"
           defaultValue={q}
-          placeholder="Search events, tasks, templates, people, files..."
+          placeholder="Search events, tasks, people, files..."
           className="h-11 w-full rounded-2xl border border-zinc-200 bg-white pl-10 pr-24 text-[13.5px] text-zinc-900 shadow-sm placeholder:text-zinc-400 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
         />
         <button

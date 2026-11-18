@@ -64,15 +64,12 @@ function SectionCard({
 export function EventForm({
   action,
   initialValues,
-  templateId,
   submitLabel = "Publish event",
   pendingLabel = "Publishing...",
   cancelHref = "/my-events",
 }: {
   action: EventAction;
   initialValues?: Partial<EventFormValues>;
-  /** Seeds the new event's agenda and checklist from this template. */
-  templateId?: string;
   submitLabel?: string;
   pendingLabel?: string;
   cancelHref?: string;
@@ -86,9 +83,6 @@ export function EventForm({
   return (
     <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <form action={formAction} className="space-y-5">
-        {templateId ? (
-          <input type="hidden" name="templateId" value={templateId} />
-        ) : null}
         <SectionCard
           icon={<TicketIcon className="h-[18px] w-[18px]" />}
           title="Event details"

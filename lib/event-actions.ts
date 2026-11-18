@@ -2,10 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { logEventActivity } from "./activity.ts";
-import { seedEventFromTemplate } from "./event-from-template.ts";
 import { eventCategories, type EventFormState } from "./event-types.ts";
 import { createEvent } from "./events.ts";
-import { getTemplateForUser } from "./templates.ts";
 import { getSessionUser } from "./session-cookie.ts";
 
 function text(value: FormDataEntryValue | null) {
@@ -28,7 +26,6 @@ export async function publishEvent(
     time: text(formData.get("time")),
     capacity: text(formData.get("capacity")),
   };
-  const templateId = text(formData.get("templateId"));
 
   if (values.title.length < 3) {
     return { error: "Give your event a title of at least 3 characters.", values };
@@ -79,24 +76,6 @@ export async function publishEvent(
     kind: "event",
     summary: `${user.name} created the event with the title "${values.title}"`,
   });
-
-  // Seeding is best effort: the event exists, and a broken preset should not
-  // send the organiser back to the form with a duplicate-risk error.
-  const template = templateId
-    ? await getTemplateForUser(templateId, user.id)
-    : null;
-  if (template) {
-    try {
-      await seedEventFromTemplate({
-        eventId: event.id,
-        actorId: user.id,
-        template,
-        startsAt: startsAt.toISOString(),
-      });
-    } catch {
-      // Leave the event without presets rather than failing the publish.
-    }
-  }
 
   redirect(`/events/${event.id}`);
 }

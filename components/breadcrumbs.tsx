@@ -8,7 +8,6 @@ const labels: Record<string, string> = {
   dashboard: "Dashboard",
   "my-events": "My Events",
   calendar: "Calendar",
-  templates: "Templates",
   "my-activity": "My Activity",
   profile: "Profile",
   settings: "Settings",

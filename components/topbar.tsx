@@ -25,8 +25,8 @@ async function AccountArea() {
 
 export function Topbar() {
   return (
-    <header className="sticky top-0 z-30 hidden px-4 pt-4 lg:block lg:px-6 print:hidden">
-      <div className="mx-auto flex h-[60px] w-full max-w-[1480px] items-center gap-3 rounded-2xl border border-line bg-panel/85 px-3 shadow-panel backdrop-blur-xl">
+    <header className="sticky top-0 z-30 hidden px-4 pt-4 sm:px-6 lg:block lg:px-8 print:hidden">
+      <div className="mx-auto flex h-[60px] w-full max-w-[1560px] items-center gap-3 rounded-2xl border border-line bg-panel/85 px-3 shadow-panel backdrop-blur-xl">
         <SidebarToggle />
 
         <div className="min-w-0 flex-1">

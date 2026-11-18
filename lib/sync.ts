@@ -118,6 +118,18 @@ export type SyncChange = {
   event: unknown | null;
 };
 
+export type SyncEventMember = {
+  id: string;
+  eventId: string;
+  userId: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  role: string;
+  invitedAt: string;
+  status: string;
+};
+
 /**
  * Appends an event mutation to the workspace changelog so paired desktop
  * apps pick it up. `deviceId` is null for changes made in the web app.
@@ -182,8 +194,8 @@ export async function pullSyncChanges(
   device: SyncDevice,
   cursor: number,
 ): Promise<
-  | { mode: "snapshot"; cursor: number; events: unknown[] }
-  | { mode: "changes"; cursor: number; changes: SyncChange[] }
+  | { mode: "snapshot"; cursor: number; events: unknown[]; members: SyncEventMember[] }
+  | { mode: "changes"; cursor: number; changes: SyncChange[]; members: SyncEventMember[] }
 > {
   const db = await getDb();
 
@@ -193,6 +205,39 @@ export async function pullSyncChanges(
        FROM sync_changes WHERE user_id = ?`,
     )
     .get(device.userId)) as { min_seq: number; max_seq: number };
+
+  const members = (await db
+    .prepare(
+      `SELECT em.id, em.event_id, em.user_id, u.name, u.email, u.avatar_url,
+              em.role, em.invited_at, em.status
+       FROM event_members em
+       JOIN events e ON e.id = em.event_id
+       JOIN users u ON u.id = em.user_id
+       WHERE e.owner_id = ? AND em.status = 'accepted'
+       ORDER BY em.event_id, em.invited_at, em.id`,
+    )
+    .all(device.userId)) as Array<{
+    id: string;
+    event_id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    avatar_url: string | null;
+    role: string;
+    invited_at: string;
+    status: string;
+  }>;
+  const memberSnapshot: SyncEventMember[] = members.map((member) => ({
+    id: member.id,
+    eventId: member.event_id,
+    userId: member.user_id,
+    name: member.name,
+    email: member.email,
+    avatarUrl: member.avatar_url,
+    role: member.role,
+    invitedAt: member.invited_at,
+    status: member.status,
+  }));
 
   const needsSnapshot = cursor === 0 || cursor < bounds.min_seq;
 
@@ -204,7 +249,7 @@ export async function pullSyncChanges(
       )
       .all(device.userId)) as EventDbRow[];
 
-    return { mode: "snapshot", cursor: bounds.max_seq, events };
+    return { mode: "snapshot", cursor: bounds.max_seq, events, members: memberSnapshot };
   }
 
   const rows = (await db
@@ -231,7 +276,7 @@ export async function pullSyncChanges(
   const cursorAfter =
     rows.length === MAX_PULL_CHANGES ? rows[rows.length - 1].seq : bounds.max_seq;
 
-  return { mode: "changes", cursor: cursorAfter, changes };
+  return { mode: "changes", cursor: cursorAfter, changes, members: memberSnapshot };
 }
 
 export type PushedChange = {

@@ -230,7 +230,7 @@ export function Sidebar({
           ) : (
             <Link
               href="/help"
-              className="group block rounded-2xl border border-accent-line bg-gradient-to-br from-[#fff7f0] to-[#fdeedd] p-3.5 transition-shadow hover:shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              className="group block rounded-2xl border border-accent-line bg-gradient-to-br from-[#fff7f0] to-[#fdeedd] p-3.5 transition-shadow hover:shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 [@media(max-height:780px)]:hidden"
             >
               <p className="text-[12.5px] font-semibold text-ink">Need a hand?</p>
               <p className="mt-0.5 text-[11.5px] leading-snug text-muted">

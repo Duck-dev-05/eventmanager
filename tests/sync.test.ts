@@ -80,9 +80,22 @@ test("pairing creates a device and authenticates its bearer token", async () => 
   assert.equal(await authenticateSyncRequest(bearerRequest(device.token)), null);
 });
 
-test("first pull returns a snapshot of the paired user's events", async () => {
+test("first pull returns event and accepted-member snapshots for the paired user's events", async () => {
   await seedUser();
   await insertEvent("evt-snapshot-1", "Snapshot Event");
+  const db = await getDb();
+  await db
+    .prepare(
+      `INSERT INTO users (id, name, email, provider, workspace_role, created_at)
+       VALUES ('sync-test-member', 'Team Member', 'team-member@example.com', 'password', 'member', ?)`,
+    )
+    .run(new Date().toISOString());
+  await db
+    .prepare(
+      `INSERT INTO event_members (id, event_id, user_id, role, invited_by, invited_at, status)
+       VALUES ('sync-member-1', 'evt-snapshot-1', 'sync-test-member', 'admin', ?, ?, 'accepted')`,
+    )
+    .run(USER_ID, new Date().toISOString());
 
   const device = await createSyncDevice(USER_ID, "Desktop");
   const result = await pullSyncChanges(device, 0);
@@ -90,6 +103,9 @@ test("first pull returns a snapshot of the paired user's events", async () => {
   assert.equal(result.mode, "snapshot");
   const events = result.events as Array<{ id: string; title: string }>;
   assert.ok(events.some((event) => event.id === "evt-snapshot-1"));
+  assert.equal(result.members.length, 1);
+  assert.equal(result.members[0].name, "Team Member");
+  assert.equal(result.members[0].role, "admin");
   assert.ok(result.cursor > 0);
 });
 

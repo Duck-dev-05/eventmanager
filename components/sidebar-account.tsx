@@ -13,12 +13,12 @@ export async function SidebarAccount() {
   if (!user) return null;
 
   return (
-    <div className="rounded-2xl border border-line bg-sunken/60 p-2">
-      <div className="flex items-center gap-2.5">
+    <div className="rounded-2xl border border-line bg-sunken/70 p-2 shadow-panel">
+      <div className="flex items-center gap-2">
         <Link
           href="/profile"
           title="Open your profile"
-          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-0.5 outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl p-1 outline-none transition-colors hover:bg-panel focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           <Avatar
             initials={initialsOf(user.name)}
@@ -39,7 +39,7 @@ export async function SidebarAccount() {
             type="submit"
             aria-label="Sign out"
             title="Sign out"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-faint transition-colors hover:bg-panel hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-faint transition-colors hover:bg-panel hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             <LogOutIcon className="h-[17px] w-[17px]" />
           </button>

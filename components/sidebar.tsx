@@ -8,6 +8,7 @@ import {
   CalendarDotsIcon,
   CalendarIcon,
   ChevronLeftIcon,
+  ChevronRightIcon,
   GridIcon,
   HelpCircleIcon,
   LogOutIcon,
@@ -85,26 +86,40 @@ function NavItem({
       title={collapsed ? label : undefined}
       aria-label={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
-      className={`group relative flex items-center gap-3 rounded-xl py-2 text-[13.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
-        collapsed ? "justify-center px-0" : "px-3"
+      className={`group relative flex items-center gap-3 rounded-2xl py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+        collapsed ? "justify-center px-0" : "px-2"
       } ${
         active
-          ? "bg-accent-soft font-semibold text-ink ring-1 ring-inset ring-accent-line"
-          : "text-ink-soft hover:bg-sunken hover:text-ink"
+          ? "bg-accent-soft ring-1 ring-inset ring-accent-line"
+          : "hover:bg-sunken"
       }`}
     >
       <span
         aria-hidden="true"
-        className={`absolute -left-px top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-opacity duration-200 ${
+        className={`absolute -left-px top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-accent transition-opacity duration-200 ${
           active && !collapsed ? "opacity-100" : "opacity-0"
         }`}
       />
-      <Icon
-        className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-          active ? "text-accent" : "text-faint group-hover:text-ink-soft"
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] transition-all duration-200 ${
+          active
+            ? "bg-gradient-to-br from-[#e08a4b] to-accent text-white shadow-sm shadow-accent/30"
+            : "bg-sunken text-muted group-hover:bg-line-soft group-hover:text-ink"
         }`}
-      />
-      {collapsed ? null : <span className="truncate">{label}</span>}
+      >
+        <Icon className="h-[17px] w-[17px]" />
+      </span>
+      {collapsed ? null : (
+        <span
+          className={`truncate ${
+            active
+              ? "text-[13.5px] font-semibold text-ink"
+              : "text-[13.5px] font-medium text-ink-soft group-hover:text-ink"
+          }`}
+        >
+          {label}
+        </span>
+      )}
     </Link>
   );
 }
@@ -130,7 +145,13 @@ function IconAction({
   );
 }
 
-export function Sidebar({ account }: { account?: ReactNode }) {
+export function Sidebar({
+  account,
+  next,
+}: {
+  account?: ReactNode;
+  next?: ReactNode;
+}) {
   const pathname = usePathname();
   const { collapsed, animate, toggle } = useSidebar();
 
@@ -185,7 +206,7 @@ export function Sidebar({ account }: { account?: ReactNode }) {
           aria-label="Workspace"
           className="mt-5 min-h-0 flex-1 overflow-y-auto pr-0.5"
         >
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {navItems.map(({ href, label, Icon }) => (
               <li key={href}>
                 <NavItem
@@ -200,7 +221,30 @@ export function Sidebar({ account }: { account?: ReactNode }) {
           </ul>
         </nav>
 
-        <div className="mt-4 border-t border-line-soft pt-3">
+        <div className="mt-4 space-y-3">
+          {collapsed ? null : next}
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-1">
+              <IconAction href="/help" label="Help & support" Icon={HelpCircleIcon} />
+            </div>
+          ) : (
+            <Link
+              href="/help"
+              className="group block rounded-2xl border border-accent-line bg-gradient-to-br from-[#fff7f0] to-[#fdeedd] p-3.5 transition-shadow hover:shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              <p className="text-[12.5px] font-semibold text-ink">Need a hand?</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-muted">
+                Guides and answers for running your events.
+              </p>
+              <span className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors group-hover:text-[#b95c26]">
+                Open help
+                <ChevronRightIcon className="h-3 w-3" />
+              </span>
+            </Link>
+          )}
+        </div>
+
+        <div className="mt-3 border-t border-line-soft pt-3">
           {collapsed ? (
             <div className="flex flex-col items-center gap-0.5">
               <IconAction href="/profile" label="Your profile" Icon={UserIcon} />
@@ -342,6 +386,21 @@ export function MobileNav() {
                 ))}
               </ul>
             </nav>
+
+            <Link
+              href="/help"
+              onClick={() => setDrawerOpen(false)}
+              className="mt-4 block rounded-2xl border border-accent-line bg-gradient-to-br from-[#fff7f0] to-[#fdeedd] p-3.5 transition-shadow hover:shadow-panel"
+            >
+              <p className="text-[12.5px] font-semibold text-ink">Need a hand?</p>
+              <p className="mt-0.5 text-[11.5px] leading-snug text-muted">
+                Guides and answers for running your events.
+              </p>
+              <span className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-accent">
+                Open help
+                <ChevronRightIcon className="h-3 w-3" />
+              </span>
+            </Link>
 
             <div className="mt-4 border-t border-line-soft pt-3">
               <form action={signOut}>

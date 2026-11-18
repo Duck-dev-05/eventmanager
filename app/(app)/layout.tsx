@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { MobileNav, Sidebar } from "@/components/sidebar";
 import { SidebarAccount } from "@/components/sidebar-account";
+import { SidebarNextEvent } from "@/components/sidebar-next-event";
 import { Topbar } from "@/components/topbar";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AppShell
         sidebar={
           <Sidebar
+            next={
+              <Suspense
+                fallback={
+                  <div className="h-[104px] rounded-2xl border border-line bg-white/60" />
+                }
+              >
+                <SidebarNextEvent />
+              </Suspense>
+            }
             account={
               <Suspense
                 fallback={

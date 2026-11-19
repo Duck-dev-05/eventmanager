@@ -9,8 +9,14 @@ import {
   MapPinIcon,
   MailIcon,
 } from "@/components/icons";
+import { InvitationComposer } from "@/components/invitation-composer";
 import { acceptInvite, declineInvite } from "@/lib/member-actions";
-import { listInvitesForEmail, type IncomingInvite } from "@/lib/events";
+import {
+  canManageEvent,
+  listEventsForUser,
+  listInvitesForEmail,
+  type IncomingInvite,
+} from "@/lib/events";
 import { longDate, startTime } from "@/lib/event-format";
 import { ROLE_LABELS } from "@/lib/roles";
 import { getSessionUser } from "@/lib/session-cookie";
@@ -99,20 +105,17 @@ function EmptyTab({
   const copy = {
     pending: {
       title: "No invitations waiting",
-      description: `When an organiser invites ${email}, it will show up here with accept and decline buttons. To invite people, open one of your events and use its Members tab. To join someone else's event, ask its organiser to invite this account.`,
-      cta: { href: "/my-events", label: "Invite people" },
+      description: `When an organiser invites ${email}, it will show up here with accept and decline buttons. To join someone else's event, ask its organiser to invite this account.`,
     },
     accepted: {
       title: "Nothing accepted yet",
       description:
         "Invitations you accept move here, and the event appears in My Events.",
-      cta: { href: "/my-events", label: "Open My Events" },
     },
     declined: {
       title: "No declined invitations",
       description:
         "Invitations you decline are kept here for reference, so you can ask the organiser for a new link.",
-      cta: { href: "/my-events", label: "Back to your events" },
     },
   }[status];
 
@@ -127,13 +130,6 @@ function EmptyTab({
       <p className="mx-auto mt-1 max-w-sm text-[13px] leading-relaxed text-zinc-500">
         {copy.description}
       </p>
-      <Link
-        href={copy.cta.href}
-        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#193b30] px-4 py-2.5 text-[12.5px] font-semibold text-white transition hover:bg-[#142e26]"
-      >
-        {copy.cta.label}
-        <ArrowRightIcon className="h-3.5 w-3.5" />
-      </Link>
     </div>
   );
 }
@@ -247,7 +243,17 @@ async function Invitations({ status }: { status: InviteStatus }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const invites = await listInvitesForEmail(user.email);
+  const [invites, userEvents] = await Promise.all([
+    listInvitesForEmail(user.email),
+    listEventsForUser(user.id),
+  ]);
+  const manageableEvents = (await Promise.all(
+    userEvents.map(async (event) =>
+      (await canManageEvent(event.id, user.id))
+        ? { id: event.id, title: event.title }
+        : null,
+    ),
+  )).filter((event): event is { id: string; title: string } => event !== null);
   const counts: Record<InviteStatus, number> = {
     pending: 0,
     accepted: 0,
@@ -260,6 +266,7 @@ async function Invitations({ status }: { status: InviteStatus }) {
 
   return (
     <div className="space-y-4">
+      <InvitationComposer events={manageableEvents} />
       <StatusTabs active={status} counts={counts} />
 
       {visible.length === 0 ? (

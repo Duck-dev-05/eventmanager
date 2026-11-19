@@ -131,6 +131,18 @@ export type SyncEventMember = {
   status: string;
 };
 
+export type SyncNotification = {
+  id: string;
+  userId: string;
+  eventId: string | null;
+  kind: string;
+  title: string;
+  message: string;
+  linkUrl: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
 export type SyncInvitation = {
   id: string;
   eventId: string;
@@ -292,8 +304,8 @@ export async function pullSyncChanges(
   device: SyncDevice,
   cursor: number,
 ): Promise<
-  | { mode: "snapshot"; cursor: number; events: unknown[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[] }
-  | { mode: "changes"; cursor: number; changes: SyncChange[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[] }
+  | { mode: "snapshot"; cursor: number; events: unknown[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[]; notifications: SyncNotification[] }
+  | { mode: "changes"; cursor: number; changes: SyncChange[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[]; notifications: SyncNotification[] }
 > {
   const db = await getDb();
 
@@ -338,6 +350,18 @@ export async function pullSyncChanges(
   }));
 
   const invitations = await listDeviceInvitations(device.userId);
+  const notifications = (await db.prepare(
+    `SELECT id, user_id, event_id, kind, title, message, link_url, read_at, created_at
+     FROM event_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`,
+  ).all(device.userId)) as Array<{
+    id: string; user_id: string; event_id: string | null; kind: string; title: string;
+    message: string; link_url: string; read_at: string | null; created_at: string;
+  }>;
+  const notificationSnapshot: SyncNotification[] = notifications.map((row) => ({
+    id: row.id, userId: row.user_id, eventId: row.event_id, kind: row.kind,
+    title: row.title, message: row.message, linkUrl: row.link_url, readAt: row.read_at,
+    createdAt: row.created_at,
+  }));
   const sharedEvents = (await db.prepare(
     `SELECT e.id, e.owner_id, e.title, e.description, e.category, e.venue,
             e.starts_at, e.capacity, e.visibility, e.created_at
@@ -356,7 +380,7 @@ export async function pullSyncChanges(
       )
       .all(device.userId)) as EventDbRow[];
 
-    return { mode: "snapshot", cursor: bounds.max_seq, events, sharedEvents, members: memberSnapshot, invitations };
+    return { mode: "snapshot", cursor: bounds.max_seq, events, sharedEvents, members: memberSnapshot, invitations, notifications: notificationSnapshot };
   }
 
   const rows = (await db
@@ -383,7 +407,7 @@ export async function pullSyncChanges(
   const cursorAfter =
     rows.length === MAX_PULL_CHANGES ? rows[rows.length - 1].seq : bounds.max_seq;
 
-  return { mode: "changes", cursor: cursorAfter, changes, sharedEvents, members: memberSnapshot, invitations };
+  return { mode: "changes", cursor: cursorAfter, changes, sharedEvents, members: memberSnapshot, invitations, notifications: notificationSnapshot };
 }
 
 export type PushedChange = {

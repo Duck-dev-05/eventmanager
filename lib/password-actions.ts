@@ -1,77 +1,22 @@
 "use server";
 
-import {
-  consumePasswordReset,
-  createPasswordResetToken,
-} from "./password-reset.ts";
-import { sendPasswordResetEmail } from "./password-reset-email.ts";
+import { consumePasswordReset } from "./password-reset.ts";
 import type { ForgotPasswordState, ResetPasswordState } from "./password-types.ts";
 import { requestIdentifier } from "./client-ip.ts";
-import { checkRateLimit, retryMessage } from "./rate-limit.ts";
-import { findUserByEmail, updateUserPassword } from "./users.ts";
-
-const NEUTRAL_MESSAGE =
-  "If an account exists for that email, a reset link is on its way.";
+import { requestPasswordResetForEmail } from "./password-reset-service.ts";
+import { updateUserPassword } from "./users.ts";
 
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function appUrl() {
-  return process.env.APP_URL?.replace(/\/$/, "") ?? "";
 }
 
 export async function requestPasswordReset(
   _state: ForgotPasswordState,
   formData: FormData,
 ): Promise<ForgotPasswordState> {
-  const email = text(formData.get("email")).toLowerCase();
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { error: "Enter the email address for your account." };
-  }
-
+  const email = text(formData.get("email"));
   const identifier = await requestIdentifier();
-  const limit = checkRateLimit({
-    key: `reset:${identifier}:${email}`,
-    limit: 5,
-    windowMs: 60 * 60 * 1000,
-  });
-  if (!limit.allowed) {
-    return { error: retryMessage(limit.retryAfterSeconds) };
-  }
-
-  const user = await findUserByEmail(email);
-
-  // Unknown addresses get the same answer so the form cannot be used to probe
-  // which emails have accounts.
-  if (!user) return { success: NEUTRAL_MESSAGE };
-
-  const token = await createPasswordResetToken(user.id);
-  const base = appUrl();
-  const resetUrl = base ? `${base}/reset-password/${token}` : "";
-
-  const delivery = resetUrl
-    ? await sendPasswordResetEmail({
-        recipientEmail: user.email,
-        recipientName: user.name,
-        resetUrl,
-      })
-    : ({ sent: false as const, reason: "not-configured" as const });
-
-  const canExposeLink =
-    !delivery.sent &&
-    process.env.NODE_ENV !== "production" &&
-    resetUrl.length > 0;
-
-  if (canExposeLink) {
-    return {
-      success: NEUTRAL_MESSAGE,
-      devLink: resetUrl,
-    };
-  }
-
-  return { success: NEUTRAL_MESSAGE };
+  return requestPasswordResetForEmail(email, identifier);
 }
 
 export async function resetPassword(

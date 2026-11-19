@@ -99,8 +99,8 @@ function EmptyTab({
   const copy = {
     pending: {
       title: "No invitations waiting",
-      description: `When an organiser invites ${email}, it will show up here with accept and decline buttons. To join an event, ask its organiser to invite this account.`,
-      cta: { href: "/events/new", label: "Create an event and invite people" },
+      description: `When an organiser invites ${email}, it will show up here with accept and decline buttons. To invite people, open one of your events and use its Members tab. To join someone else's event, ask its organiser to invite this account.`,
+      cta: { href: "/my-events", label: "Invite people" },
     },
     accepted: {
       title: "Nothing accepted yet",

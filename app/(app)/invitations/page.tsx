@@ -11,12 +11,7 @@ import {
 } from "@/components/icons";
 import { InvitationComposer } from "@/components/invitation-composer";
 import { acceptInvite, declineInvite } from "@/lib/member-actions";
-import {
-  canManageEvent,
-  listEventsForUser,
-  listInvitesForEmail,
-  type IncomingInvite,
-} from "@/lib/events";
+import { listInvitesForEmail, type IncomingInvite } from "@/lib/events";
 import { longDate, startTime } from "@/lib/event-format";
 import { ROLE_LABELS } from "@/lib/roles";
 import { getSessionUser } from "@/lib/session-cookie";
@@ -243,17 +238,7 @@ async function Invitations({ status }: { status: InviteStatus }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const [invites, userEvents] = await Promise.all([
-    listInvitesForEmail(user.email),
-    listEventsForUser(user.id),
-  ]);
-  const manageableEvents = (await Promise.all(
-    userEvents.map(async (event) =>
-      (await canManageEvent(event.id, user.id))
-        ? { id: event.id, title: event.title }
-        : null,
-    ),
-  )).filter((event): event is { id: string; title: string } => event !== null);
+  const invites = await listInvitesForEmail(user.email);
   const counts: Record<InviteStatus, number> = {
     pending: 0,
     accepted: 0,
@@ -266,7 +251,7 @@ async function Invitations({ status }: { status: InviteStatus }) {
 
   return (
     <div className="space-y-4">
-      <InvitationComposer events={manageableEvents} />
+      <InvitationComposer />
       <StatusTabs active={status} counts={counts} />
 
       {visible.length === 0 ? (
@@ -292,7 +277,7 @@ export default function InvitationsPage({
       <PageHeader
         eyebrow="Inbox"
         title="Invitations"
-        description="Events people have invited you to join."
+        description="Review event invitations and invite people to join EventPulse."
       />
 
       <Suspense fallback={<InvitationsSkeleton />}>

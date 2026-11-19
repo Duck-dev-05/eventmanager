@@ -448,6 +448,117 @@ export type EventMember = {
   avatarUrl?: string | null;
 };
 
+export type ExistingWorkspaceUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+};
+
+export async function listUsersAvailableForEvent(
+  eventId: string,
+  actorId: string,
+): Promise<ExistingWorkspaceUser[]> {
+  const rows = await (await getDb())
+    .prepare(
+      `SELECT u.id, u.name, u.email, u.avatar_url
+       FROM users u
+       JOIN events e ON e.id = ?
+       WHERE u.id <> e.owner_id
+         AND u.id <> ?
+         AND NOT EXISTS (
+           SELECT 1 FROM event_members em
+           WHERE em.event_id = e.id
+             AND em.user_id = u.id
+             AND em.status = 'accepted'
+         )
+       ORDER BY u.name COLLATE NOCASE, u.email COLLATE NOCASE`,
+    )
+    .all(eventId, actorId) as Array<{
+    id: string;
+    name: string;
+    email: string;
+    avatar_url: string | null;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    avatarUrl: row.avatar_url,
+  }));
+}
+
+export async function addExistingEventMember({
+  eventId,
+  userId,
+  actorId,
+  role = "member",
+}: {
+  eventId: string;
+  userId: string;
+  actorId: string;
+  role?: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  if (!isAssignableRole(role)) {
+    return { success: false, error: "Choose a valid role." };
+  }
+
+  const actorRole = await getEventRole(eventId, actorId);
+  if (actorRole === null || !rolePermissions(actorRole).canManageTeam) {
+    return { success: false, error: "Only the event owner and admins can add people." };
+  }
+  if (userId === actorId) {
+    return { success: false, error: "You are already the event owner or organizer." };
+  }
+  if ((await getEventRole(eventId, userId)) === "owner") {
+    return { success: false, error: "The event owner is already a member of this event." };
+  }
+
+  const db = await getDb();
+  const target = await db
+    .prepare("SELECT id, email FROM users WHERE id = ?")
+    .get(userId) as { id: string; email: string } | undefined;
+  if (!target) return { success: false, error: "That account no longer exists." };
+
+  const existing = await db
+    .prepare("SELECT status FROM event_members WHERE event_id = ? AND user_id = ?")
+    .get(eventId, userId) as { status: string } | undefined;
+  if (existing?.status === "accepted") {
+    return { success: false, error: "This person is already a member of the event." };
+  }
+
+  const now = new Date().toISOString();
+  const txn = await db.transaction();
+  try {
+    if (existing) {
+      await txn.prepare(
+        `UPDATE event_members
+         SET role = ?, invited_by = ?, invited_at = ?, status = 'accepted'
+         WHERE event_id = ? AND user_id = ?`,
+      ).run(role, actorId, now, eventId, userId);
+    } else {
+      await txn.prepare(
+        `INSERT INTO event_members
+          (id, event_id, user_id, role, invited_by, status, invited_at)
+         VALUES (?, ?, ?, ?, ?, 'accepted', ?)`,
+      ).run(randomUUID(), eventId, userId, role, actorId, now);
+    }
+
+    await txn.prepare(
+      `UPDATE event_invites
+       SET status = 'accepted', accepted_at = ?
+       WHERE event_id = ? AND lower(email) = lower(?) AND status = 'pending'`,
+    ).run(now, eventId, target.email);
+    await txn.commit();
+  } catch {
+    await txn.rollback().catch(() => {});
+    return { success: false, error: "Could not add this person to the event." };
+  }
+
+  return { success: true };
+}
+
 export async function getEventMembers(eventId: string): Promise<EventMember[]> {
   const rows = await (await getDb())
     .prepare(

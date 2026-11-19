@@ -6,6 +6,7 @@ import {
   getEventInvitations,
   getEventMembers,
   getEventRole,
+  listUsersAvailableForEvent,
 } from "@/lib/events";
 import { rolePermissions } from "@/lib/roles";
 import { getSessionUser } from "@/lib/session-cookie";
@@ -37,9 +38,10 @@ async function MembersServer({ id }: { id: string }) {
     email: "",
     avatarUrl: undefined,
   };
-  const [members, invitations] = await Promise.all([
+  const [members, invitations, availableUsers] = await Promise.all([
     getEventMembers(id),
     getEventInvitations(id),
+    canManageTeam ? listUsersAvailableForEvent(id, user.id) : Promise.resolve([]),
   ]);
 
   return (
@@ -72,6 +74,7 @@ async function MembersServer({ id }: { id: string }) {
           : []
       }
       eventId={id}
+      availableUsers={availableUsers}
     />
   );
 }

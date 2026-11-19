@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   changeMemberRole,
+  addExistingEventMember,
   declineInvitation,
   leaveEvent,
   removeMember,
@@ -20,23 +21,6 @@ import {
 import { Avatar } from "./avatar";
 import { InlineNotice } from "./inline-notice";
 import { InviteMemberForm } from "./invite-member-form";
-
-const AVATAR_GRADIENTS = [
-  "from-[#193b30] to-[#2d5c47]", // forest
-  "from-[#1e3a5f] to-[#2d5c8c]", // ocean
-  "from-[#4a1942] to-[#7b2d6e]", // plum
-  "from-[#5c2d1e] to-[#8c4a30]", // amber
-  "from-[#1a3a5c] to-[#2a5c82]", // slate
-  "from-[#2d3a1e] to-[#4e6b35]", // olive
-];
-
-function getAvatarGradient(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) & 0xffff;
-  }
-  return AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
-}
 
 type Member = {
   id: string;
@@ -69,6 +53,7 @@ export function EventMembersClient({
   members,
   invitations,
   eventId,
+  availableUsers,
 }: {
   role: EventRole;
   owner: Person;
@@ -76,6 +61,7 @@ export function EventMembersClient({
   members: Member[];
   invitations: Invitation[];
   eventId: string;
+  availableUsers: Person[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -83,6 +69,7 @@ export function EventMembersClient({
   const [notice, setNotice] = useState<
     { tone: "error" | "success"; text: string } | null
   >(null);
+  const [selectedUserId, setSelectedUserId] = useState(availableUsers[0]?.id ?? "");
 
   const { canManageTeam, canChangeRoles, canLeave } = rolePermissions(role);
   const total = members.length + 1;
@@ -96,6 +83,21 @@ export function EventMembersClient({
       setBusy(null);
       if (result.success) {
         setNotice(null);
+        router.refresh();
+      } else {
+        setNotice({ tone: "error", text: result.error });
+      }
+    });
+  }
+
+  function handleAddExistingMember() {
+    if (!selectedUserId) return;
+    setBusy("add-existing");
+    startTransition(async () => {
+      const result = await addExistingEventMember(eventId, selectedUserId);
+      setBusy(null);
+      if (result.success) {
+        setNotice({ tone: "success", text: result.message ?? "Member added to the event." });
         router.refresh();
       } else {
         setNotice({ tone: "error", text: result.error });
@@ -187,7 +189,33 @@ export function EventMembersClient({
             {total} {total === 1 ? "member" : "members"}
             {invitations.length > 0 ? ` · ${invitations.length} invited` : ""}
           </span>
-          {canManageTeam ? <InviteMemberForm eventId={eventId} /> : null}
+          {canManageTeam ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {availableUsers.length > 0 ? (
+                <>
+                  <select
+                    aria-label="Choose an existing EventPulse user"
+                    value={selectedUserId}
+                    onChange={(event) => setSelectedUserId(event.target.value)}
+                    className="max-w-[220px] rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[12px] text-zinc-700"
+                  >
+                    {availableUsers.map((person) => (
+                      <option key={person.id} value={person.id}>{person.name} · {person.email}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddExistingMember}
+                    disabled={pending || !selectedUserId}
+                    className="rounded-xl border border-[#193b30] px-3 py-2 text-[12px] font-semibold text-[#193b30] disabled:opacity-50"
+                  >
+                    {pending && busy === "add-existing" ? "Adding…" : "Add existing user"}
+                  </button>
+                </>
+              ) : null}
+              <InviteMemberForm eventId={eventId} />
+            </div>
+          ) : null}
         </div>
       </div>
 

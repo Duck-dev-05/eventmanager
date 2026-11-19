@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { logEventActivity } from "./activity.ts";
 import {
   acceptEventInvite,
+  addExistingEventMember as addExistingEventMemberRecord,
   canManageEvent,
   createEventInvite,
   declineEventInviteById,
@@ -185,6 +186,46 @@ export async function resendInvitation(
       ? `Invitation re-sent to ${result.email}.`
       : `Email is not configured. Share this link: ${delivery.url}`,
   };
+}
+
+export async function addExistingEventMember(
+  eventId: string,
+  memberId: string,
+  role = "member",
+): Promise<MemberActionResult> {
+  const user = await getSessionUser();
+  if (!user) return { success: false, error: "You must be signed in." };
+
+  const result = await addExistingEventMemberRecord({
+    eventId,
+    userId: memberId,
+    actorId: user.id,
+    role,
+  });
+  if (!result.success) return result;
+
+  const target = await findUserById(memberId);
+  await logEventActivity({
+    eventId,
+    actorId: user.id,
+    kind: "member",
+    summary: `added ${target?.name ?? target?.email ?? "a member"} directly to the event`,
+  });
+
+  const title = (await getEventTitle(eventId)) ?? "Event";
+  await createNotification({
+    userId: memberId,
+    eventId,
+    kind: "event_shared",
+    title: `${title}: you were added to the event`,
+    message: `${user.name} added you directly as ${ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role}.`,
+    linkUrl: `/events/${eventId}`,
+  });
+
+  revalidatePath(`/events/${eventId}/members`);
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/my-events");
+  return { success: true, message: `${target?.name ?? "Member"} was added to the event.` };
 }
 
 export async function removeMember(

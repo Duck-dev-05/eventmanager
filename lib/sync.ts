@@ -1,5 +1,6 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getDb } from "./db.ts";
+import { logEventActivity } from "./activity.ts";
 
 /**
  * Desktop app sync. The Tauri desktop app polls /api/sync/pull every few
@@ -130,6 +131,103 @@ export type SyncEventMember = {
   status: string;
 };
 
+export type SyncInvitation = {
+  id: string;
+  eventId: string;
+  email: string;
+  role: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+  expiresAt: string;
+  eventTitle: string;
+  startsAt: string;
+  venue: string;
+  category: string;
+  inviterName: string | null;
+};
+
+async function listDeviceInvitations(userId: string): Promise<SyncInvitation[]> {
+  const db = await getDb();
+  const account = await db.prepare("SELECT email FROM users WHERE id = ?").get(userId) as { email: string } | undefined;
+  if (!account) return [];
+  const rows = await db.prepare(
+    `SELECT i.id, i.event_id, i.email, i.role, i.status, i.created_at, i.expires_at,
+            e.title AS event_title, e.starts_at, e.venue, e.category, u.name AS inviter_name
+     FROM event_invites i
+     JOIN events e ON e.id = i.event_id
+     LEFT JOIN users u ON u.id = i.invited_by
+     WHERE lower(i.email) = lower(?)
+       AND i.status IN ('pending', 'accepted', 'declined')
+       AND (i.status <> 'pending' OR i.expires_at > ?)
+     ORDER BY i.created_at DESC`,
+  ).all(account.email, new Date().toISOString()) as Array<{
+    id: string; event_id: string; email: string; role: string; status: "pending" | "accepted" | "declined";
+    created_at: string; expires_at: string; event_title: string; starts_at: string; venue: string;
+    category: string; inviter_name: string | null;
+  }>;
+  return rows.map((row) => ({
+    id: row.id, eventId: row.event_id, email: row.email, role: row.role, status: row.status,
+    createdAt: row.created_at, expiresAt: row.expires_at, eventTitle: row.event_title,
+    startsAt: row.starts_at, venue: row.venue, category: row.category, inviterName: row.inviter_name,
+  }));
+}
+
+export async function respondToDeviceInvitation(
+  device: SyncDevice,
+  invitationId: string,
+  response: "accept" | "decline",
+): Promise<{ success: true; eventId: string } | { success: false; error: string }> {
+  const db = await getDb();
+  const account = await db.prepare("SELECT id, email, name FROM users WHERE id = ?").get(device.userId) as
+    | { id: string; email: string; name: string }
+    | undefined;
+  if (!account) return { success: false, error: "The paired account no longer exists." };
+
+  const now = new Date().toISOString();
+  const txn = await db.transaction();
+  let eventId = "";
+  try {
+    const invite = await txn.prepare(
+      `SELECT i.id, i.event_id, i.email, i.role, i.invited_by, i.status, i.expires_at,
+              i.created_at, e.title
+       FROM event_invites i JOIN events e ON e.id = i.event_id WHERE i.id = ?`,
+    ).get(invitationId) as { id: string; event_id: string; email: string; role: string; invited_by: string; status: string; expires_at: string; created_at: string; title: string } | undefined;
+    if (!invite || invite.email.trim().toLowerCase() !== account.email.trim().toLowerCase()) {
+      await txn.rollback();
+      return { success: false, error: "Invitation not found for this account." };
+    }
+    if (invite.status !== "pending" || new Date(invite.expires_at).getTime() <= Date.now()) {
+      await txn.rollback();
+      return { success: false, error: "This invitation has already been handled or has expired." };
+    }
+    eventId = invite.event_id;
+
+    if (response === "accept") {
+      await txn.prepare(
+        `INSERT INTO event_members (id, event_id, user_id, role, invited_by, status, invited_at)
+         VALUES (?, ?, ?, ?, ?, 'accepted', ?)
+         ON CONFLICT (event_id, user_id) DO UPDATE SET status = 'accepted', role = excluded.role`,
+      ).run(randomUUID(), invite.event_id, account.id, invite.role, invite.invited_by, invite.created_at);
+      await txn.prepare(
+        "UPDATE event_invites SET status = 'accepted', accepted_at = ? WHERE id = ? AND status = 'pending'",
+      ).run(now, invitationId);
+    } else {
+      await txn.prepare(
+        "UPDATE event_invites SET status = 'declined', accepted_at = NULL, declined_at = ? WHERE id = ? AND status = 'pending'",
+      ).run(now, invitationId);
+    }
+    await txn.commit();
+  } catch (error) {
+    await txn.rollback().catch(() => {});
+    return { success: false, error: error instanceof Error ? error.message : "Could not update invitation." };
+  }
+
+  if (response === "accept") {
+    await logEventActivity({ eventId, actorId: account.id, kind: "member", summary: `${account.name} joined the event` }).catch(() => {});
+  }
+  return { success: true, eventId };
+}
+
 /**
  * Appends an event mutation to the workspace changelog so paired desktop
  * apps pick it up. `deviceId` is null for changes made in the web app.
@@ -194,8 +292,8 @@ export async function pullSyncChanges(
   device: SyncDevice,
   cursor: number,
 ): Promise<
-  | { mode: "snapshot"; cursor: number; events: unknown[]; members: SyncEventMember[] }
-  | { mode: "changes"; cursor: number; changes: SyncChange[]; members: SyncEventMember[] }
+  | { mode: "snapshot"; cursor: number; events: unknown[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[] }
+  | { mode: "changes"; cursor: number; changes: SyncChange[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[] }
 > {
   const db = await getDb();
 
@@ -239,6 +337,15 @@ export async function pullSyncChanges(
     status: member.status,
   }));
 
+  const invitations = await listDeviceInvitations(device.userId);
+  const sharedEvents = (await db.prepare(
+    `SELECT e.id, e.owner_id, e.title, e.description, e.category, e.venue,
+            e.starts_at, e.capacity, e.visibility, e.created_at
+     FROM events e
+     JOIN event_members em ON em.event_id = e.id
+     WHERE em.user_id = ? AND em.status = 'accepted' AND e.owner_id <> ?
+     ORDER BY e.starts_at ASC`,
+  ).all(device.userId, device.userId)) as EventDbRow[];
   const needsSnapshot = cursor === 0 || cursor < bounds.min_seq;
 
   if (needsSnapshot) {
@@ -249,7 +356,7 @@ export async function pullSyncChanges(
       )
       .all(device.userId)) as EventDbRow[];
 
-    return { mode: "snapshot", cursor: bounds.max_seq, events, members: memberSnapshot };
+    return { mode: "snapshot", cursor: bounds.max_seq, events, sharedEvents, members: memberSnapshot, invitations };
   }
 
   const rows = (await db
@@ -276,7 +383,7 @@ export async function pullSyncChanges(
   const cursorAfter =
     rows.length === MAX_PULL_CHANGES ? rows[rows.length - 1].seq : bounds.max_seq;
 
-  return { mode: "changes", cursor: cursorAfter, changes, members: memberSnapshot };
+  return { mode: "changes", cursor: cursorAfter, changes, sharedEvents, members: memberSnapshot, invitations };
 }
 
 export type PushedChange = {

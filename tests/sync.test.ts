@@ -21,6 +21,7 @@ const {
   listSyncDevices,
   pullSyncChanges,
   pushSyncChanges,
+  respondToDeviceInvitation,
 } = await import("../lib/sync.ts");
 
 const USER_ID = "sync-test-user-0001";
@@ -96,17 +97,84 @@ test("first pull returns event and accepted-member snapshots for the paired user
        VALUES ('sync-member-1', 'evt-snapshot-1', 'sync-test-member', 'admin', ?, ?, 'accepted')`,
     )
     .run(USER_ID, new Date().toISOString());
-
   const device = await createSyncDevice(USER_ID, "Desktop");
   const result = await pullSyncChanges(device, 0);
 
   assert.equal(result.mode, "snapshot");
   const events = result.events as Array<{ id: string; title: string }>;
   assert.ok(events.some((event) => event.id === "evt-snapshot-1"));
+  const sharedEvents = result.sharedEvents as Array<{ id: string }>;
+  assert.equal(sharedEvents.length, 0, "owners should not receive their events as shared events");
   assert.equal(result.members.length, 1);
   assert.equal(result.members[0].name, "Team Member");
   assert.equal(result.members[0].role, "admin");
+
+  const memberDevice = await createSyncDevice("sync-test-member", "Member Desktop");
+  const memberSnapshot = await pullSyncChanges(memberDevice, 0);
+  if (memberSnapshot.mode !== "snapshot") throw new Error("Expected an initial snapshot");
+  const memberOwnedEvents = memberSnapshot.events as Array<{ id: string }>;
+  assert.equal(memberOwnedEvents.length, 0, "shared events are not returned as owned events");
+  const memberSharedEvents = memberSnapshot.sharedEvents as Array<{ id: string }>;
+  assert.equal(memberSharedEvents.length, 1);
+  assert.equal(memberSharedEvents[0].id, "evt-snapshot-1");
   assert.ok(result.cursor > 0);
+});
+
+test("device receives website invitations and can accept or decline them for its paired user", async () => {
+  await seedUser();
+  await insertEvent("evt-invitation-sync", "Invitation Event");
+  await insertEvent("evt-invitation-decline", "Decline Event");
+  const db = await getDb();
+  await db.prepare(
+    `INSERT INTO event_invites
+      (id, event_id, email, invited_by, token, status, expires_at, created_at, role)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, 'admin')`,
+  ).run(
+    "invite-desktop-accept", "evt-invitation-sync", "sync-test@example.com", USER_ID,
+    "secure-test-token", new Date(Date.now() + 86_400_000).toISOString(), new Date().toISOString(),
+  );
+  await db.prepare(
+    `INSERT INTO event_invites
+      (id, event_id, email, invited_by, token, status, expires_at, created_at, role)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, 'member')`,
+  ).run(
+    "invite-desktop-decline", "evt-invitation-decline", "sync-test@example.com", USER_ID,
+    "secure-test-token-2", new Date(Date.now() + 86_400_000).toISOString(), new Date().toISOString(),
+  );
+
+  const device = await createSyncDevice(USER_ID, "Desktop Invitations");
+  await db.prepare(
+    `INSERT INTO users (id, name, email, provider, workspace_role, created_at)
+     VALUES ('other-sync-user', 'Other User', 'other-sync@example.com', 'password', 'member', ?)`,
+  ).run(new Date().toISOString());
+  const otherDevice = await createSyncDevice("other-sync-user", "Other Desktop");
+  const unauthorized = await respondToDeviceInvitation(otherDevice, "invite-desktop-accept", "accept");
+  assert.equal(unauthorized.success, false, "a different paired account cannot respond to this invitation");
+
+  const otherSnapshot = await pullSyncChanges(otherDevice, 0);
+  assert.equal(otherSnapshot.invitations.length, 0, "invitations are only disclosed to the invited account");
+
+  const snapshot = await pullSyncChanges(device, 0);
+  assert.equal(snapshot.invitations.length, 2);
+  assert.equal(snapshot.invitations[0].email, "sync-test@example.com");
+  assert.equal(snapshot.invitations[0].status, "pending");
+
+  const accepted = await respondToDeviceInvitation(device, "invite-desktop-accept", "accept");
+  assert.deepEqual(accepted, { success: true, eventId: "evt-invitation-sync" });
+  const membership = await db.prepare(
+    "SELECT role, status FROM event_members WHERE event_id = ? AND user_id = ?",
+  ).get("evt-invitation-sync", USER_ID) as { role: string; status: string } | undefined;
+  assert.deepEqual(membership, { role: "admin", status: "accepted" });
+
+  const declined = await respondToDeviceInvitation(device, "invite-desktop-decline", "decline");
+  assert.deepEqual(declined, { success: true, eventId: "evt-invitation-decline" });
+  const inviteStatuses = await db.prepare(
+    "SELECT id, status FROM event_invites WHERE id LIKE 'invite-desktop-%' ORDER BY id",
+  ).all() as Array<{ id: string; status: string }>;
+  assert.deepEqual(inviteStatuses, [
+    { id: "invite-desktop-accept", status: "accepted" },
+    { id: "invite-desktop-decline", status: "declined" },
+  ]);
 });
 
 test("web-origin changes are delivered incrementally to the device", async () => {

@@ -99,8 +99,8 @@ function EmptyTab({
   const copy = {
     pending: {
       title: "No invitations waiting",
-      description: `When an organiser invites ${email}, it will show up here with accept and decline buttons.`,
-      cta: { href: "/my-events", label: "Back to your events" },
+      description: `When an organiser invites ${email}, it will show up here with accept and decline buttons. To join an event, ask its organiser to invite this account.`,
+      cta: { href: "/events/new", label: "Create an event and invite people" },
     },
     accepted: {
       title: "Nothing accepted yet",
@@ -129,7 +129,7 @@ function EmptyTab({
       </p>
       <Link
         href={copy.cta.href}
-        className="mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-indigo-600 hover:text-indigo-700"
+        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#193b30] px-4 py-2.5 text-[12.5px] font-semibold text-white transition hover:bg-[#142e26]"
       >
         {copy.cta.label}
         <ArrowRightIcon className="h-3.5 w-3.5" />

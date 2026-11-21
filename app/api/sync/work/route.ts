@@ -228,8 +228,8 @@ export async function POST(request: Request) {
       }
       continue;
     }
-    const collision = await db.prepare("SELECT event_id FROM event_files WHERE id=?").get(id) as { event_id: string } | undefined;
-    if (collision && collision.event_id !== eventId) continue;
+    const fileCollision = await db.prepare("SELECT event_id FROM event_files WHERE id=?").get(id) as { event_id: string } | undefined;
+    if (fileCollision && fileCollision.event_id !== eventId) continue;
     if (uploadBytes && existing && !existing.storage_key.startsWith(`sync-pending:${device.id}:`)) {
       await db.prepare("UPDATE event_files SET storage_key=? WHERE id=? AND event_id=?").run(`sync-pending:${device.id}:${id}`, id, eventId);
     }

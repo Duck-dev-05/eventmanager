@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getSessionUser } from "@/lib/session-cookie";
 
-export const runtime = "nodejs";
-
 const MAX_CHUNK_CHARS = 400_000;
 const MAX_CHUNKS_PER_FILE = 100;
 

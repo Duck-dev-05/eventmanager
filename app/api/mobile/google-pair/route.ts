@@ -4,8 +4,6 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { requestIdentifier } from "@/lib/client-ip";
 import { getDb } from "@/lib/db";
 
-export const dynamic = "force-dynamic";
-
 const SESSION_TTL_MS = 5 * 60 * 1000;
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 

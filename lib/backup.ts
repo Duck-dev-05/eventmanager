@@ -7,7 +7,7 @@ export const WEB_BACKUP_VERSION = 1;
 type BackupValue = string | number | boolean | null | { $binary: string };
 export type BackupTableRows = Record<string, BackupValue>[];
 export type WebBackup = {
-  format: typeof WEB_BACKUP_FORMAT | "eventpulse-web-backup";
+  format: typeof WEB_BACKUP_FORMAT | "eventpulse-web-backup" | "eventpulse-desktop-backup";
   source?: "web" | "desktop";
   version: typeof WEB_BACKUP_VERSION;
   createdAt: string;

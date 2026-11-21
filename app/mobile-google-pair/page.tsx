@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session-cookie";
 
-export const dynamic = "force-dynamic";
+export const instant = false;
 
 export default async function MobileGooglePairPage() {
   const user = await getSessionUser();

@@ -4,8 +4,6 @@ import { cookies } from "next/headers";
 import { buildAuthorizationUrl, createPkcePair, createState, getGoogleConfig } from "@/lib/google";
 import { getDb } from "@/lib/db";
 
-export const dynamic = "force-dynamic";
-
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 function validSecret(secret: string, expectedHash: string) {

@@ -4,8 +4,6 @@ import { getDb } from "@/lib/db";
 import { restoreWebBackup, validateWebBackup } from "@/lib/backup";
 import { getSessionUser } from "@/lib/session-cookie";
 
-export const runtime = "nodejs";
-
 export async function POST(request: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Sign in to restore a backup." }, { status: 401 });

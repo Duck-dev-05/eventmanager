@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const config = getGoogleConfig(url.origin);
 
   if (!config) {
-    return NextResponse.redirect(new URL("/login", url));
+    return NextResponse.redirect(new URL("/login?notice=google-unavailable", url));
   }
 
   const state = createState();

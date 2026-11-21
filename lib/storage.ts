@@ -1,6 +1,6 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { del, put } from "@vercel/blob";
+import { del, get as getBlob, put } from "@vercel/blob";
 import { dataDirectory } from "./db.ts";
 
 /**
@@ -33,10 +33,12 @@ export async function putObject({
   key,
   bytes,
   contentType,
+  allowOverwrite = false,
 }: {
   key: string;
   bytes: Uint8Array;
   contentType: string;
+  allowOverwrite?: boolean;
 }): Promise<string> {
   const token = blobToken();
 
@@ -53,6 +55,7 @@ export async function putObject({
       access: "public",
       contentType,
       addRandomSuffix: false,
+      allowOverwrite,
       token,
     });
     return blob.url;
@@ -65,6 +68,31 @@ export async function putObject({
 }
 
 /** Reads an object by storage reference (blob URL or local key). */
+export async function getObjectRange(
+  reference: string,
+  start: number,
+  length: number,
+): Promise<Buffer> {
+  if (reference.startsWith("https://")) {
+    const response = await fetch(reference, {
+      headers: { Range: `bytes=${start}-${start + length - 1}` },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Object storage returned ${response.status}.`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return response.status === 206 ? bytes : bytes.subarray(start, start + length);
+  }
+
+  const file = await open(localPath(reference), "r");
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await file.read(buffer, 0, length, start);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await file.close();
+  }
+}
+
 export async function getObject(reference: string): Promise<Buffer> {
   if (reference.startsWith("https://")) {
     const response = await fetch(reference, { cache: "no-store" });
@@ -74,7 +102,24 @@ export async function getObject(reference: string): Promise<Buffer> {
     return Buffer.from(await response.arrayBuffer());
   }
 
+  const token = blobToken();
+  if (token) {
+    const result = await getBlob(reference, { access: "public", token });
+    if (!result || result.statusCode !== 200) throw new Error("Object storage could not find the requested file.");
+    return Buffer.from(await new Response(result.stream).arrayBuffer());
+  }
+
   return readFile(localPath(reference));
+}
+
+/** Deletes a known object key from the configured storage backend. */
+export async function deleteObjectKey(key: string): Promise<void> {
+  const token = blobToken();
+  if (token) {
+    await del(key, { token }).catch(() => {});
+    return;
+  }
+  await unlink(localPath(key)).catch(() => {});
 }
 
 /** Deletes an object by storage reference; missing objects are ignored. */

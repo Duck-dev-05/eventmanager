@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import { BackupControls } from "@/components/backup-controls";
 import { CalendarFeedCard } from "@/components/calendar-feed-card";
 import { DesktopSyncCard } from "@/components/desktop-sync-card";
 import { PageHeader } from "@/components/page-header";
@@ -77,6 +78,13 @@ async function SettingsContent() {
         </div>
         <div className="mt-6 border-t border-zinc-100 pt-6">
           <DesktopSyncCard devices={devices} />
+        </div>
+        <div className="mt-6 border-t border-zinc-100 pt-6">
+          <h2 className="text-[15px] font-semibold tracking-tight text-zinc-900">Backup & restore</h2>
+          <p className="mt-0.5 text-[13px] text-zinc-500">Keep a portable copy of your complete workspace.</p>
+          <div className="mt-4">
+            <BackupControls isOwner={user.workspaceRole === "owner"} />
+          </div>
         </div>
       </section>
 

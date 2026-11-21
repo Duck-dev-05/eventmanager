@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "./db.ts";
 import { getEventRole } from "./events.ts";
 import { rolePermissions } from "./roles.ts";
+import { logEventActivity } from "./activity.ts";
 
 export type AgendaItemStatus = "scheduled" | "live" | "completed" | "cancelled";
 
@@ -17,6 +18,7 @@ export type AgendaItem = {
   status: AgendaItemStatus;
   sortOrder: number;
   createdAt: string;
+  updatedAt: string;
 };
 
 type AgendaRow = {
@@ -31,6 +33,7 @@ type AgendaRow = {
   status: string;
   sort_order: number;
   created_at: string;
+  updated_at: string;
 };
 
 function toAgendaItem(row: AgendaRow): AgendaItem {
@@ -51,6 +54,7 @@ function toAgendaItem(row: AgendaRow): AgendaItem {
     status: validStatus,
     sortOrder: Number(row.sort_order) || 0,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -60,7 +64,7 @@ export async function getEventAgenda(eventId: string): Promise<AgendaItem[]> {
     .prepare(
       `
       SELECT id, event_id, title, description, starts_at, duration_minutes,
-             location, speaker_name, status, sort_order, created_at
+             location, speaker_name, status, sort_order, created_at, updated_at
       FROM event_agenda_items
       WHERE event_id = ?
       ORDER BY datetime(starts_at) ASC, sort_order ASC, created_at ASC
@@ -77,7 +81,7 @@ export async function getAgendaItemById(itemId: string): Promise<AgendaItem | nu
     .prepare(
       `
       SELECT id, event_id, title, description, starts_at, duration_minutes,
-             location, speaker_name, status, sort_order, created_at
+             location, speaker_name, status, sort_order, created_at, updated_at
       FROM event_agenda_items
       WHERE id = ?
     `,
@@ -170,8 +174,8 @@ export async function createAgendaItem({
     `
     INSERT INTO event_agenda_items (
       id, event_id, title, description, starts_at, duration_minutes,
-      location, speaker_name, status, sort_order, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)
+      location, speaker_name, status, sort_order, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)
   `,
   ).run(
     id,
@@ -184,7 +188,9 @@ export async function createAgendaItem({
     speakerName.trim(),
     sortOrder,
     createdAt,
+    createdAt,
   );
+  await logEventActivity({ eventId, actorId, kind: "agenda", summary: `created agenda session ${trimmedTitle}` });
 
   return {
     success: true,
@@ -200,6 +206,7 @@ export async function createAgendaItem({
       status: "scheduled",
       sortOrder,
       createdAt,
+      updatedAt: createdAt,
     },
   };
 }
@@ -270,11 +277,12 @@ export async function updateAgendaItem({
   const nextSortOrder = sortOrder !== undefined ? sortOrder : existing.sortOrder;
 
   const db = await getDb();
+  const changed = existing.title !== nextTitle || existing.description !== nextDescription || existing.startsAt !== nextStartsAt || existing.durationMinutes !== nextDuration || existing.location !== nextLocation || existing.speakerName !== nextSpeaker || existing.status !== nextStatus || existing.sortOrder !== nextSortOrder;
   db.prepare(
     `
     UPDATE event_agenda_items
     SET title = ?, description = ?, starts_at = ?, duration_minutes = ?,
-        location = ?, speaker_name = ?, status = ?, sort_order = ?
+        location = ?, speaker_name = ?, status = ?, sort_order = ?, updated_at = ?
     WHERE id = ? AND event_id = ?
   `,
   ).run(
@@ -286,9 +294,11 @@ export async function updateAgendaItem({
     nextSpeaker,
     nextStatus,
     nextSortOrder,
+    new Date().toISOString(),
     itemId,
     eventId,
   );
+  if (changed) await logEventActivity({ eventId, actorId, kind: "agenda", summary: `updated agenda session ${nextTitle}` });
 
   return { success: true };
 }
@@ -313,12 +323,24 @@ export async function deleteAgendaItem({
   }
 
   const db = await getDb();
+  const existing = await db
+    .prepare("SELECT title FROM event_agenda_items WHERE id = ? AND event_id = ?")
+    .get(itemId, eventId) as { title: string } | undefined;
   const res = await db
     .prepare("DELETE FROM event_agenda_items WHERE id = ? AND event_id = ?")
     .run(itemId, eventId);
 
   if (res.changes === 0) {
     return { success: false, error: "Item not found or already deleted." };
+  }
+
+  await db.prepare(
+    `INSERT INTO sync_work_tombstones (event_id,kind,entity_id,deleted_at)
+     VALUES (?, 'agenda', ?, ?) ON CONFLICT(event_id,kind,entity_id)
+     DO UPDATE SET deleted_at=excluded.deleted_at`,
+  ).run(eventId, itemId, new Date().toISOString());
+  if (existing) {
+    await logEventActivity({ eventId, actorId, kind: "agenda", summary: `deleted agenda session ${existing.title}` });
   }
 
   return { success: true };
@@ -346,12 +368,16 @@ export async function setAgendaItemStatus({
   }
 
   const db = await getDb();
+  const existing = await db.prepare("SELECT title,status FROM event_agenda_items WHERE id=? AND event_id=?").get(itemId,eventId) as { title:string; status:string } | undefined;
   const res = await db
-    .prepare("UPDATE event_agenda_items SET status = ? WHERE id = ? AND event_id = ?")
-    .run(status, itemId, eventId);
+    .prepare("UPDATE event_agenda_items SET status = ?, updated_at = ? WHERE id = ? AND event_id = ?")
+    .run(status, new Date().toISOString(), itemId, eventId);
 
   if (res.changes === 0) {
     return { success: false, error: "Item not found." };
+  }
+  if (existing && existing.status !== status) {
+    await logEventActivity({ eventId, actorId, kind: "agenda", summary: `agenda session ${existing.title} marked ${status}` });
   }
 
   return { success: true };

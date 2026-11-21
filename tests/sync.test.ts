@@ -259,6 +259,67 @@ test("pushed desktop changes land in the events table and changelog", async () =
   assert.equal(change?.action, "upsert");
 });
 
+test("desktop admin updates preserve the event owner and other users cannot edit it", async () => {
+  await seedUser();
+  const db = await getDb();
+  const adminId = "sync-test-admin-0001";
+  const memberId = "sync-test-member-0002";
+  const now = new Date().toISOString();
+  for (const [id, name, email] of [
+    [adminId, "Event Admin", "sync-admin@example.com"],
+    [memberId, "Event Member", "sync-member@example.com"],
+  ]) {
+    await db.prepare(
+      "INSERT INTO users (id,name,email,provider,workspace_role,created_at) VALUES (?,? ,?,'password','member',?)",
+    ).run(id, name, email, now);
+  }
+  await insertEvent("evt-shared-admin-edit", "Original Shared Title");
+  await db.prepare(
+    "INSERT INTO event_members (id,event_id,user_id,role,invited_by,invited_at,status) VALUES ('evt-admin-membership','evt-shared-admin-edit',?,'admin',?,?,'accepted')",
+  ).run(adminId, USER_ID, now);
+  await db.prepare(
+    "INSERT INTO event_members (id,event_id,user_id,role,invited_by,invited_at,status) VALUES ('evt-member-membership','evt-shared-admin-edit',?,'member',?,?,'accepted')",
+  ).run(memberId, USER_ID, now);
+
+  const adminDevice = await createSyncDevice(adminId, "Admin Desktop");
+  const adminPush = await pushSyncChanges(adminDevice, [{
+    id: randomUUID(),
+    action: "upsert",
+    event: {
+      id: "evt-shared-admin-edit",
+      title: "Updated by Admin",
+      startsAt: "2026-06-01T10:00:00.000Z",
+      visibility: "private",
+      createdAt: now,
+    },
+  }]);
+  assert.equal(adminPush.accepted, 1);
+  let row = await db.prepare(
+    "SELECT owner_id,title FROM events WHERE id='evt-shared-admin-edit'",
+  ).get() as { owner_id: string; title: string };
+  assert.equal(row.owner_id, USER_ID);
+  assert.equal(row.title, "Updated by Admin");
+
+  const memberDevice = await createSyncDevice(memberId, "Member Desktop");
+  const memberPush = await pushSyncChanges(memberDevice, [{
+    id: randomUUID(),
+    action: "upsert",
+    event: {
+      id: "evt-shared-admin-edit",
+      title: "Unauthorized Update",
+      startsAt: "2026-06-01T10:00:00.000Z",
+      visibility: "private",
+      createdAt: now,
+    },
+  }]);
+  assert.equal(memberPush.accepted, 0);
+  row = await db.prepare(
+    "SELECT owner_id,title FROM events WHERE id='evt-shared-admin-edit'",
+  ).get() as { owner_id: string; title: string };
+  assert.equal(row.owner_id, USER_ID);
+  assert.equal(row.title, "Updated by Admin");
+});
+
 test("pushed deletes remove the event", async () => {
   const desktop = await createSyncDevice(USER_ID, "Desktop 5");
   await insertEvent("evt-to-delete", "Doomed Event");

@@ -32,7 +32,9 @@ the `.db` file by hand — use the backup script.
    - `APP_URL` (the deployment origin, used in emails and OAuth redirects)
    - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (optional; enables “Continue
      with Google”. Add `https://<deployment>/api/v1/auth/google/callback` to the
-     OAuth client's authorized redirect URIs.)
+     OAuth client's authorized redirect URIs.) Android Google sign-in reuses
+     this website OAuth flow through the browser; never include the Web client
+     secret in the Android app or its JSON configuration file.
    - `GMAIL_USER` / `GMAIL_APP_PASSWORD` / optional `GMAIL_FROM`
 4. Deploy. Schema migrations run automatically on first database use.
 

@@ -25,10 +25,18 @@ export async function POST(request: Request) {
 
   let email = "";
   let password = "";
+  let deviceName = "Desktop app";
   try {
-    const body = (await request.json()) as { email?: unknown; password?: unknown };
+    const body = (await request.json()) as { email?: unknown; password?: unknown; deviceName?: unknown };
     email = typeof body.email === "string" ? body.email.trim() : "";
     password = typeof body.password === "string" ? body.password : "";
+    if (typeof body.deviceName === "string") {
+      const requestedName = body.deviceName.trim();
+      if (requestedName.length > 80) {
+        return NextResponse.json({ error: "Device name must be 80 characters or fewer." }, { status: 400 });
+      }
+      if (requestedName) deviceName = requestedName;
+    }
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
@@ -48,11 +56,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const device = await createSyncDevice(user.id, "Desktop app");
+  const device = await createSyncDevice(user.id, deviceName);
 
   return NextResponse.json({
     device: { id: device.id, name: device.name },
-    user: { id: user.id, name: user.name, email: user.email },
+    user: { id: user.id, name: user.name, email: user.email, workspaceRole: user.workspaceRole },
     token: device.token,
   });
 }

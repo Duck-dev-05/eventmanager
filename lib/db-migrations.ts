@@ -264,4 +264,60 @@ export const migrations: string[] = [
       last_seq INTEGER NOT NULL DEFAULT 0
     );
   `,
+  `
+    ALTER TABLE event_tasks ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+    UPDATE event_tasks SET updated_at = created_at WHERE updated_at = '';
+
+    ALTER TABLE event_agenda_items ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+    UPDATE event_agenda_items SET updated_at = created_at WHERE updated_at = '';
+
+    ALTER TABLE event_files ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+    UPDATE event_files SET updated_at = created_at WHERE updated_at = '';
+
+    CREATE TABLE sync_file_upload_chunks (
+      device_id TEXT NOT NULL REFERENCES sync_devices (id) ON DELETE CASCADE,
+      file_id TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      chunk_count INTEGER NOT NULL,
+      bytes BLOB NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (device_id, file_id, chunk_index)
+    );
+    CREATE INDEX sync_file_upload_chunks_created_idx
+      ON sync_file_upload_chunks (created_at);
+
+    CREATE TABLE sync_work_tombstones (
+      event_id TEXT NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK (kind IN ('task', 'agenda', 'file')),
+      entity_id TEXT NOT NULL,
+      deleted_at TEXT NOT NULL,
+      PRIMARY KEY (event_id, kind, entity_id)
+    );
+    CREATE INDEX sync_work_tombstones_deleted_idx
+      ON sync_work_tombstones (deleted_at);
+  `,
+  `
+    CREATE TABLE mobile_google_pairing_sessions (
+      id TEXT PRIMARY KEY,
+      poll_secret_hash TEXT NOT NULL,
+      launch_code_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'processing', 'complete')),
+      device_id TEXT REFERENCES sync_devices (id) ON DELETE CASCADE,
+      device_token TEXT,
+      user_id TEXT REFERENCES users (id) ON DELETE CASCADE,
+      user_name TEXT,
+      user_email TEXT,
+      user_role TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX mobile_google_pairing_expires_idx
+      ON mobile_google_pairing_sessions (expires_at);
+  `,
 ];

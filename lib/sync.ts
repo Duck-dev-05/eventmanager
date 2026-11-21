@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { getDb } from "./db.ts";
 import { logEventActivity } from "./activity.ts";
+import { getPreferences } from "./preferences.ts";
 
 /**
  * Desktop app sync. The Tauri desktop app polls /api/sync/pull every few
@@ -304,8 +305,8 @@ export async function pullSyncChanges(
   device: SyncDevice,
   cursor: number,
 ): Promise<
-  | { mode: "snapshot"; cursor: number; events: unknown[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[]; notifications: SyncNotification[] }
-  | { mode: "changes"; cursor: number; changes: SyncChange[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[]; notifications: SyncNotification[] }
+  | { mode: "snapshot"; cursor: number; events: unknown[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[]; notifications: SyncNotification[]; preferences: Awaited<ReturnType<typeof getPreferences>>; profile: { name: string; avatarUrl: string | null } }
+  | { mode: "changes"; cursor: number; changes: SyncChange[]; sharedEvents: unknown[]; members: SyncEventMember[]; invitations: SyncInvitation[]; notifications: SyncNotification[]; preferences: Awaited<ReturnType<typeof getPreferences>>; profile: { name: string; avatarUrl: string | null } }
 > {
   const db = await getDb();
 
@@ -323,10 +324,13 @@ export async function pullSyncChanges(
        FROM event_members em
        JOIN events e ON e.id = em.event_id
        JOIN users u ON u.id = em.user_id
-       WHERE e.owner_id = ? AND em.status = 'accepted'
+       WHERE (e.owner_id = ? OR EXISTS (
+         SELECT 1 FROM event_members access_member
+         WHERE access_member.event_id = e.id AND access_member.user_id = ? AND access_member.status = 'accepted'
+       )) AND em.status = 'accepted'
        ORDER BY em.event_id, em.invited_at, em.id`,
     )
-    .all(device.userId)) as Array<{
+    .all(device.userId, device.userId)) as Array<{
     id: string;
     event_id: string;
     user_id: string;
@@ -350,6 +354,9 @@ export async function pullSyncChanges(
   }));
 
   const invitations = await listDeviceInvitations(device.userId);
+  const preferences = await getPreferences(device.userId);
+  const account = await db.prepare("SELECT name,avatar_url FROM users WHERE id=?").get(device.userId) as { name: string; avatar_url: string | null } | undefined;
+  const profile = { name: account?.name ?? "", avatarUrl: account?.avatar_url ?? null };
   const notifications = (await db.prepare(
     `SELECT id, user_id, event_id, kind, title, message, link_url, read_at, created_at
      FROM event_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`,
@@ -380,7 +387,7 @@ export async function pullSyncChanges(
       )
       .all(device.userId)) as EventDbRow[];
 
-    return { mode: "snapshot", cursor: bounds.max_seq, events, sharedEvents, members: memberSnapshot, invitations, notifications: notificationSnapshot };
+    return { mode: "snapshot", cursor: bounds.max_seq, events, sharedEvents, members: memberSnapshot, invitations, notifications: notificationSnapshot, preferences, profile };
   }
 
   const rows = (await db
@@ -407,7 +414,7 @@ export async function pullSyncChanges(
   const cursorAfter =
     rows.length === MAX_PULL_CHANGES ? rows[rows.length - 1].seq : bounds.max_seq;
 
-  return { mode: "changes", cursor: cursorAfter, changes, sharedEvents, members: memberSnapshot, invitations, notifications: notificationSnapshot };
+  return { mode: "changes", cursor: cursorAfter, changes, sharedEvents, members: memberSnapshot, invitations, notifications: notificationSnapshot, preferences, profile };
 }
 
 export type PushedChange = {
@@ -477,14 +484,30 @@ export async function pushSyncChanges(
     const eventId = asString(event.id ?? "");
     const title = asString(event.title ?? "").trim();
     const startsAt = asString(event.startsAt ?? event.starts_at ?? "");
-    if (!eventId || title.length < 1 || !startsAt) continue;
+    if (!eventId || title.length < 3 || title.length > 160 || !startsAt) continue;
 
-    const visibility =
-      asString(event.visibility ?? "") === "public" ? "public" : "private";
+    const existing = (await db
+      .prepare("SELECT owner_id, visibility FROM events WHERE id = ?")
+      .get(eventId)) as { owner_id: string; visibility: string | null } | undefined;
+    let ownerId = device.userId;
+    if (existing) {
+      ownerId = existing.owner_id;
+      if (ownerId !== device.userId) {
+        const membership = (await db
+          .prepare("SELECT role FROM event_members WHERE event_id = ? AND user_id = ? AND status = 'accepted'")
+          .get(eventId, device.userId)) as { role: string } | undefined;
+        if (membership?.role !== "admin") continue;
+      }
+    }
+
+    const requestedVisibility = asString(event.visibility ?? "");
+    const visibility = requestedVisibility === "public" || requestedVisibility === "private"
+      ? requestedVisibility
+      : existing?.visibility === "public" ? "public" : "private";
 
     const row: EventDbRow = {
       id: eventId,
-      owner_id: device.userId,
+      owner_id: ownerId,
       title,
       description: asString(event.description ?? ""),
       category: asString(event.category ?? "", "Other"),
@@ -524,8 +547,8 @@ export async function pushSyncChanges(
       );
 
     await appendSyncChange(db, {
-      userId: device.userId,
-      deviceId: device.id,
+      userId: row.owner_id,
+      deviceId: row.owner_id === device.userId ? device.id : null,
       action: "upsert",
       eventId: row.id,
       event: row,

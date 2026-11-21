@@ -5,6 +5,8 @@
 **Method:** full route inventory, source reading, `npx tsc --noEmit`, `npm run lint`
 **Scope:** correctness, incomplete features, missing pages, documentation drift. No code was changed during this audit.
 
+> **Maintenance note:** This is a historical snapshot, not a current backlog. Several items below have since been implemented. Current deployment, test, and feature guidance lives in [`README.md`](../README.md) and [`docs/BACKUP_AND_DEPLOYMENT.md`](./BACKUP_AND_DEPLOYMENT.md). The previously reported P2 hygiene risks were rechecked: no `lib/db.ts.bak` exists, `*.log` is ignored, the README documents deployment/storage, tests and CI are present, `AUTH_SECRET` fails closed in production, and global not-found/error boundaries exist. Re-run the checks in section 6 before treating this audit as current.
+
 > This file describes the code as it exists today. It supersedes the older
 > [`pending-work.md`](./pending-work.md) and
 > [`REQUIRED_PAGES_AND_FUNCTIONS.md`](./REQUIRED_PAGES_AND_FUNCTIONS.md) where they disagree —

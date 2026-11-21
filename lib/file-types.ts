@@ -69,4 +69,5 @@ export type EventFile = {
   sizeBytes: number;
   uploaderName: string;
   createdAt: string;
+  updatedAt: string;
 };

@@ -4,6 +4,7 @@ import { getDb } from "./db.ts";
 import { deleteObject, getObject, putObject } from "./storage.ts";
 import { getEventRole } from "./events.ts";
 import { rolePermissions } from "./roles.ts";
+import { logEventActivity } from "./activity.ts";
 
 import {
   MAX_FILE_BYTES,
@@ -18,7 +19,7 @@ export async function getEventFiles(eventId: string): Promise<EventFile[]> {
   const rows = await (await getDb())
     .prepare(
       `SELECT f.id, f.name, f.mime_type, f.size_bytes,
-              u.name AS uploader_name, f.created_at
+              u.name AS uploader_name, f.created_at, f.updated_at
        FROM event_files f
        LEFT JOIN users u ON u.id = f.uploaded_by
        WHERE f.event_id = ?
@@ -33,6 +34,7 @@ export async function getEventFiles(eventId: string): Promise<EventFile[]> {
     sizeBytes: row.size_bytes,
     uploaderName: row.uploader_name ?? "Someone",
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }));
 }
 
@@ -43,6 +45,7 @@ type FileRow = {
   size_bytes: number;
   uploader_name: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 function safeExtension(fileName: string) {
@@ -90,11 +93,12 @@ export async function storeEventFile({
   });
 
   const id = randomUUID();
+  const now = new Date().toISOString();
   await (await getDb())
     .prepare(
       `INSERT INTO event_files
-         (id, event_id, name, mime_type, size_bytes, storage_key, uploaded_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, event_id, name, mime_type, size_bytes, storage_key, uploaded_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -104,8 +108,10 @@ export async function storeEventFile({
       bytes.byteLength,
       storedKey,
       actorId,
-      new Date().toISOString(),
+      now,
+      now,
     );
+  await logEventActivity({ eventId, actorId, kind: "file", summary: `uploaded ${cleanName.slice(0, 180)}` });
 
   return { success: true, id };
 }
@@ -196,6 +202,12 @@ export async function deleteEventFile({
     fileId,
     eventId,
   );
+  await db.prepare(
+    `INSERT INTO sync_work_tombstones (event_id,kind,entity_id,deleted_at)
+     VALUES (?, 'file', ?, ?) ON CONFLICT(event_id,kind,entity_id)
+     DO UPDATE SET deleted_at=excluded.deleted_at`,
+  ).run(eventId, fileId, new Date().toISOString());
+  await logEventActivity({ eventId, actorId, kind: "file", summary: `deleted ${row.name}` });
 
   await deleteObject(row.storage_key);
 

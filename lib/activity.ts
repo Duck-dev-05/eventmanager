@@ -40,12 +40,16 @@ export async function logEventActivity({
   const clean = summary.replace(/\s+/g, " ").trim().slice(0, 300);
   if (!eventId || !clean) return;
 
-  await (await getDb())
-    .prepare(
-      `INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(randomUUID(), eventId, actorId, kind, clean, new Date().toISOString());
+  try {
+    await (await getDb())
+      .prepare(
+        `INSERT INTO event_activity (id, event_id, actor_id, kind, summary, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(randomUUID(), eventId, actorId, kind, clean, new Date().toISOString());
+  } catch {
+    // Activity is best-effort and must not interrupt the underlying action.
+  }
 }
 
 export async function getEventActivity(

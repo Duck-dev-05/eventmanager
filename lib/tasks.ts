@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "./db.ts";
 import { getEventRole } from "./events.ts";
 import { rolePermissions } from "./roles.ts";
+import { logEventActivity } from "./activity.ts";
 
 export type TaskStatus = "open" | "done";
 
@@ -15,6 +16,7 @@ export type EventTask = {
   assigneeAvatarUrl?: string | null;
   dueAt: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 type TaskRow = {
@@ -27,6 +29,7 @@ type TaskRow = {
   assignee_avatar_url: string | null;
   due_at: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 function toTask(row: TaskRow): EventTask {
@@ -40,6 +43,7 @@ function toTask(row: TaskRow): EventTask {
     assigneeAvatarUrl: row.assignee_avatar_url,
     dueAt: row.due_at,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -73,7 +77,7 @@ export async function getEventTasks(eventId: string): Promise<EventTask[]> {
     .prepare(
       `SELECT t.id, t.title, t.notes, t.status, t.assignee_id,
               u.name AS assignee_name, u.avatar_url AS assignee_avatar_url,
-              t.due_at, t.created_at
+              t.due_at, t.created_at, t.updated_at
        FROM event_tasks t
        LEFT JOIN users u ON u.id = t.assignee_id
        WHERE t.event_id = ?
@@ -151,10 +155,11 @@ export async function createEventTask({
   }
 
   const id = randomUUID();
+  const now = new Date().toISOString();
   db.prepare(
     `INSERT INTO event_tasks
-       (id, event_id, title, notes, status, assignee_id, due_at, created_by, created_at)
-     VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+       (id, event_id, title, notes, status, assignee_id, due_at, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
   ).run(
     id,
     eventId,
@@ -163,8 +168,10 @@ export async function createEventTask({
     assigneeId,
     dueAt,
     actorId,
-    new Date().toISOString(),
+    now,
+    now,
   );
+  await logEventActivity({ eventId, actorId, kind: "task", summary: `created task ${cleanTitle}` });
 
   return { success: true, id };
 }
@@ -207,16 +214,21 @@ export async function updateEventTask({
     };
   }
 
-  const updated = await (await getDb())
+  const db = await getDb();
+  const existing = await db.prepare("SELECT title,notes,assignee_id,due_at FROM event_tasks WHERE id=? AND event_id=?").get(taskId,eventId) as { title:string; notes:string; assignee_id:string|null; due_at:string|null } | undefined;
+  const updated = await db
     .prepare(
       `UPDATE event_tasks
-       SET title = ?, notes = ?, assignee_id = ?, due_at = ?
+       SET title = ?, notes = ?, assignee_id = ?, due_at = ?, updated_at = ?
        WHERE id = ? AND event_id = ?`,
     )
-    .run(cleanTitle, notes.trim(), assigneeId, dueAt, taskId, eventId);
+    .run(cleanTitle, notes.trim(), assigneeId, dueAt, new Date().toISOString(), taskId, eventId);
 
   if (updated.changes === 0) {
     return { success: false, error: "This task no longer exists." };
+  }
+  if (existing && (existing.title !== cleanTitle || existing.notes !== notes.trim() || existing.assignee_id !== assigneeId || existing.due_at !== dueAt)) {
+    await logEventActivity({ eventId, actorId, kind: "task", summary: `updated task ${cleanTitle}` });
   }
 
   return { success: true };
@@ -248,13 +260,21 @@ export async function deleteEventTask({
     return { success: false, error: "This task no longer exists." };
   }
 
-  const deleted = await (await getDb())
+  const db = await getDb();
+  const deleted = await db
     .prepare(`DELETE FROM event_tasks WHERE id = ? AND event_id = ?`)
     .run(taskId, eventId);
 
   if (deleted.changes === 0) {
     return { success: false, error: "This task no longer exists." };
   }
+
+  await db.prepare(
+    `INSERT INTO sync_work_tombstones (event_id,kind,entity_id,deleted_at)
+     VALUES (?, 'task', ?, ?) ON CONFLICT(event_id,kind,entity_id)
+     DO UPDATE SET deleted_at=excluded.deleted_at`,
+  ).run(eventId, taskId, new Date().toISOString());
+  await logEventActivity({ eventId, actorId, kind: "task", summary: `deleted task ${existing.title}` });
 
   return { success: true, title: existing.title };
 }
@@ -279,8 +299,8 @@ export async function setEventTaskStatus({
   }
 
   const existing = await (await getDb())
-    .prepare(`SELECT title FROM event_tasks WHERE id = ? AND event_id = ?`)
-    .get(taskId, eventId) as { title: string } | undefined;
+    .prepare(`SELECT title, status FROM event_tasks WHERE id = ? AND event_id = ?`)
+    .get(taskId, eventId) as { title: string; status: string } | undefined;
 
   if (!existing) {
     return { success: false, error: "This task no longer exists." };
@@ -288,12 +308,15 @@ export async function setEventTaskStatus({
 
   const updated = await (await getDb())
     .prepare(
-      `UPDATE event_tasks SET status = ? WHERE id = ? AND event_id = ?`,
+      `UPDATE event_tasks SET status = ?, updated_at = ? WHERE id = ? AND event_id = ?`,
     )
-    .run(status === "done" ? "done" : "open", taskId, eventId);
+    .run(status === "done" ? "done" : "open", new Date().toISOString(), taskId, eventId);
 
   if (updated.changes === 0) {
     return { success: false, error: "This task no longer exists." };
+  }
+  if (existing.status !== (status === "done" ? "done" : "open")) {
+    await logEventActivity({ eventId, actorId, kind: "task", summary: `${existing.title} marked ${status === "done" ? "done" : "open"}` });
   }
 
   return { success: true, title: existing.title };

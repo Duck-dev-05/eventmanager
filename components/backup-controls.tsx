@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Alert } from "@/components/ui";
 
 const CHUNK_CHARS = 400_000;
 const CHUNK_UPLOAD_THRESHOLD = 800_000;
@@ -125,7 +124,14 @@ export function BackupControls({ isOwner }: { isOwner: boolean }) {
           if (file) void restoreBackup(file);
         }} />
       </div>
-      {message && <Alert tone={error ? "danger" : "success"}>{message}</Alert>}
+      {message && (
+        <p
+          role={error ? "alert" : "status"}
+          className={`rounded-xl border px-4 py-2.5 text-[12.5px] font-medium ${error ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}`}
+        >
+          {message}
+        </p>
+      )}
     </div>
   );
 }
